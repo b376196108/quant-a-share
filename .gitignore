@@ -1,0 +1,11 @@
+# 忽略缓存和数据文件
+quant-a-share/data_cache/
+*.sqlite
+*.db
+# 忽略本地缓存数据，不上传到 GitHub
+data_cache/
+*.sqlite
+*.db
+*.pkl
+*.zip
+*.csv

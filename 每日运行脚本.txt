@@ -1,0 +1,50 @@
+**终端更新股票代码
+conda activate quant-env
+python scripts/update_daily_data.py
+
+**终端更新行业内容
+conda activate quant-env
+python scripts/update_industry_mapping.py
+
+****接口更新
+cd E:\lianghuagit\quant-a-share\quant-a-share
+conda activate quant-env
+python scripts\generate_api_docs.py
+
+*****更新文档目录
+conda activate quant-env
+python scripts/update_codex_directory_structure.py
+*****
+你现在的任务是：更新 docs/codex_context.md 中的
+“## 📁 Project Directory Structure <!-- CODEX_UPDATE_DIRECTORY_STRUCTURE -->”
+这一段内容。
+
+请严格按照以下要求执行：
+
+1. **读取当前项目的真实目录结构**（从项目根目录 quant-a-share/ 开始，递归扫描子目录）。
+   - 目录包括：config/、data_cache/、docs/、notebooks/、quant_system/（含 backtest/data/indicators/processing/strategy/visualization）、scripts/、tests/、requirements.txt、每日运行脚本.txt 等。
+   - 若存在 webui/ 前端目录，也需加入结构。
+
+2. **重新生成一段全新的目录树（text 格式）**  
+   - 目录结构须完整、准确、无遗漏  
+   - 按层级展示（使用 ├──、│、└──）
+
+3. **每个目录或文件后必须追加中文说明**（简短但准确），例如：  
+   - `# 数据存储与缓存`  
+   - `# 技术指标插件目录`  
+   - `# 回测引擎主文件`  
+   - `# Vue3 前端项目根目录`
+
+4. 用新生成的目录结构 **完全覆盖** codex_context.md 中  
+   `## 📁 Project Directory Structure <!-- CODEX_UPDATE_DIRECTORY_STRUCTURE -->`  
+   这部分的内容（保持标题不变）。
+
+5. 更新后的 codex_context.md 必须保持 Markdown 正常格式，不改变文档其他部分。
+
+执行步骤：
+- 扫描目录  
+- 生成目录结构（含中文）  
+- 覆盖写入 codex_context.md  
+- 输出“更新完成”提示
+
+现在开始执行。
