@@ -48,3 +48,14 @@ python scripts/update_codex_directory_structure.py
 - 输出“更新完成”提示
 
 现在开始执行。
+
+
+****启动接口
+conda activate quant-env
+cd F:\Lianghuagit\quant-a-share
+python -m uvicorn web_api.main:app --reload --host 0.0.0.0 --port 8000
+
+*****启动web
+conda activate quant-env
+cd F:\Lianghuagit\quant-a-share\webui
+npm run dev

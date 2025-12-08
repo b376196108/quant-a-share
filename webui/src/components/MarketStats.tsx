@@ -1,5 +1,5 @@
 import React from 'react';
-import { IndustryData, MarketStatsData } from '../types';
+import type { IndustryData, MarketStatsData } from '../types';
 import { TrendingUp, Thermometer } from 'lucide-react';
 
 interface MarketStatsProps {

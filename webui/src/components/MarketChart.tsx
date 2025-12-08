@@ -10,9 +10,10 @@ import {
   Line,
   Cell,
   ReferenceDot,
-  Label
+  Label,
 } from 'recharts';
-import { StockData, TradeRecord } from '../types';
+import type { TooltipContentProps } from 'recharts';
+import type { StockData, TradeRecord } from '../types';
 
 interface MarketChartProps {
   data: StockData[];
@@ -20,9 +21,14 @@ interface MarketChartProps {
   trades?: TradeRecord[]; // Optional trades for backtesting visualization
 }
 
+type ChartDatum = StockData & {
+  bodyRange: [number, number];
+  color: string;
+};
+
 const MarketChart: React.FC<MarketChartProps> = ({ data, symbol, trades }) => {
   // Transform data for Recharts Range Bar
-  const chartData = data.map(d => ({
+  const chartData: ChartDatum[] = data.map((d) => ({
     ...d,
     // [min, max] for the candle body
     bodyRange: [Math.min(d.open, d.close), Math.max(d.open, d.close)],
@@ -31,30 +37,46 @@ const MarketChart: React.FC<MarketChartProps> = ({ data, symbol, trades }) => {
   }));
 
   // Helper to format tooltip
-  const renderTooltip = (props: any) => {
+  const renderTooltip = (props: TooltipContentProps<number, string>) => {
     const { active, payload, label } = props;
     if (active && payload && payload.length) {
-      const ohlc = payload.find((p: any) => p.dataKey === 'bodyRange')?.payload;
-      if (!ohlc) return null;
-      
+      const datum = payload[0]?.payload as ChartDatum | undefined;
+      if (!datum) return null;
+
+      const labelStr = typeof label === 'string' ? label : label?.toString() ?? '';
+
       return (
         <div className="bg-slate-800 border border-slate-600 p-3 rounded shadow-xl text-xs text-slate-200">
-          <p className="font-bold mb-2 text-white">{label}</p>
+          <p className="font-bold mb-2 text-white">{labelStr}</p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-            <span className="text-slate-400">Open:</span> <span className="font-mono">{ohlc.open.toFixed(2)}</span>
-            <span className="text-slate-400">High:</span> <span className="font-mono">{ohlc.high.toFixed(2)}</span>
-            <span className="text-slate-400">Low:</span> <span className="font-mono">{ohlc.low.toFixed(2)}</span>
-            <span className="text-slate-400">Close:</span> <span className={`font-mono ${ohlc.close > ohlc.open ? 'text-red-400' : 'text-emerald-400'}`}>{ohlc.close.toFixed(2)}</span>
-            <span className="text-slate-400">Vol:</span> <span className="font-mono">{(ohlc.volume / 1000000).toFixed(1)}M</span>
+            <span className="text-slate-400">Open:</span>{' '}
+            <span className="font-mono">{datum.open.toFixed(2)}</span>
+            <span className="text-slate-400">High:</span>{' '}
+            <span className="font-mono">{datum.high.toFixed(2)}</span>
+            <span className="text-slate-400">Low:</span>{' '}
+            <span className="font-mono">{datum.low.toFixed(2)}</span>
+            <span className="text-slate-400">Close:</span>{' '}
+            <span
+              className={`font-mono ${datum.close > datum.open ? 'text-red-400' : 'text-emerald-400'}`}
+            >
+              {datum.close.toFixed(2)}
+            </span>
+            <span className="text-slate-400">Vol:</span>{' '}
+            <span className="font-mono">{(datum.volume / 1000000).toFixed(1)}M</span>
           </div>
           {trades && (
-             <div className="mt-2 pt-2 border-t border-slate-700">
-                {trades.filter(t => t.date === label).map(t => (
-                  <div key={t.id} className={`font-bold ${t.type === 'BUY' ? 'text-red-500' : 'text-emerald-500'}`}>
+            <div className="mt-2 pt-2 border-t border-slate-700">
+              {trades
+                .filter((t) => t.date === labelStr)
+                .map((t) => (
+                  <div
+                    key={t.id}
+                    className={`font-bold ${t.type === 'BUY' ? 'text-red-500' : 'text-emerald-500'}`}
+                  >
                     {t.type === 'BUY' ? '买入' : '卖出'} @ {t.price}
                   </div>
                 ))}
-             </div>
+            </div>
           )}
         </div>
       );
@@ -113,7 +135,7 @@ const MarketChart: React.FC<MarketChartProps> = ({ data, symbol, trades }) => {
             <Line type="monotone" dataKey="ma20" stroke="#3b82f6" strokeWidth={1} dot={false} name="MA20" />
 
             {/* Trade Annotations */}
-            {trades && trades.map((trade, idx) => (
+            {trades && trades.map((trade) => (
               <ReferenceDot
                 key={trade.id}
                 x={trade.date}

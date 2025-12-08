@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { IndustrySentiment } from '../types';
+import type { IndustrySentiment } from '../types';
 
 const IndustrySentimentTable: React.FC = () => {
   const [data, setData] = useState<IndustrySentiment[]>([]);
@@ -16,8 +16,9 @@ const IndustrySentimentTable: React.FC = () => {
       }
       const jsonData = await response.json();
       setData(jsonData);
-    } catch (err: any) {
-      setError(err.message || '获取数据失败');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '获取数据失败';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -26,6 +27,16 @@ const IndustrySentimentTable: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const asNumber = (value: string | number | undefined, fallback = 0): number => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const asString = (value: string | number | undefined): string => {
+    if (value === undefined) return '';
+    return String(value);
+  };
 
   const getSentimentClass = (sentiment: string) => {
     if (sentiment.includes('高潮') || sentiment.includes('热')) return 'sentiment-hot';
@@ -71,44 +82,72 @@ const IndustrySentimentTable: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {data.map((item, index) => (
-              <tr key={index}>
-                <td style={{ fontWeight: 500 }}>{item["行业"]}</td>
-                <td>
-                  <span className={`sentiment-tag ${getSentimentClass(item["情绪"])}`}>
-                    {item["情绪"]}
-                  </span>
-                </td>
-                <td>
-                  <span className={item["平均涨幅(%)"] >= 0 ? 'text-up' : 'text-down'}>
-                    {item["平均涨幅(%)"].toFixed(2)}%
-                  </span>
-                  <span style={{ color: '#9ca3af', margin: '0 4px' }}>/</span>
-                  <span className={item["中位涨幅(%)"] >= 0 ? 'text-up' : 'text-down'}>
-                    {item["中位涨幅(%)"].toFixed(2)}%
-                  </span>
-                </td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '50px', height: '4px', backgroundColor: '#e5e7eb', borderRadius: '2px', overflow: 'hidden' }}>
-                      <div style={{ width: `${item["上涨占比"] * 100}%`, height: '100%', backgroundColor: 'var(--color-up)' }}></div>
+            {data.map((item, index) => {
+              const industry = asString(item['行业'] as string | number | undefined);
+              const sentiment = asString(item['情绪'] as string | number | undefined);
+              const avgChange = asNumber(item['平均涨幅(%)'] as number | string | undefined);
+              const medianChange = asNumber(item['中位涨幅(%)'] as number | string | undefined);
+              const upRatio = asNumber(item['上涨占比'] as number | string | undefined);
+              const turnover = asNumber(item['总成交额(亿元)'] as number | string | undefined);
+              const upCount = asNumber(item['上涨家数'] as number | string | undefined);
+              const downCount = asNumber(item['下跌家数'] as number | string | undefined);
+              const limitUp = asNumber(item['涨停家数'] as number | string | undefined);
+              const limitDown = asNumber(item['跌停家数'] as number | string | undefined);
+              const upRatioPct = (upRatio * 100).toFixed(0);
+
+              return (
+                <tr key={index}>
+                  <td style={{ fontWeight: 500 }}>{industry}</td>
+                  <td>
+                    <span className={`sentiment-tag ${getSentimentClass(sentiment)}`}>
+                      {sentiment}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={avgChange >= 0 ? 'text-up' : 'text-down'}>
+                      {avgChange.toFixed(2)}%
+                    </span>
+                    <span style={{ color: '#9ca3af', margin: '0 4px' }}>/</span>
+                    <span className={medianChange >= 0 ? 'text-up' : 'text-down'}>
+                      {medianChange.toFixed(2)}%
+                    </span>
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div
+                        style={{
+                          width: '50px',
+                          height: '4px',
+                          backgroundColor: '#e5e7eb',
+                          borderRadius: '2px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${upRatio * 100}%`,
+                            height: '100%',
+                            backgroundColor: 'var(--color-up)',
+                          }}
+                        ></div>
+                      </div>
+                      <span>{`${upRatioPct}%`}</span>
                     </div>
-                    <span>{(item["上涨占比"] * 100).toFixed(0)}%</span>
-                  </div>
-                </td>
-                <td>{item["总成交额(亿元)"].toLocaleString()}</td>
-                <td>
-                  <span className="text-up">{item["上涨家数"]}</span>
-                  <span style={{ margin: '0 2px' }}>:</span>
-                  <span className="text-down">{item["下跌家数"]}</span>
-                </td>
-                <td>
-                   <span className="text-up">{item["涨停家数"]}</span>
-                   <span style={{ margin: '0 2px' }}>/</span>
-                   <span className="text-down">{item["跌停家数"]}</span>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td>{turnover.toLocaleString()}</td>
+                  <td>
+                    <span className="text-up">{upCount}</span>
+                    <span style={{ margin: '0 2px' }}>:</span>
+                    <span className="text-down">{downCount}</span>
+                  </td>
+                  <td>
+                    <span className="text-up">{limitUp}</span>
+                    <span style={{ margin: '0 2px' }}>/</span>
+                    <span className="text-down">{limitDown}</span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Strategy } from '../types';
+import type { Strategy } from '../types';
 import { Play, Pause, Activity, Search, Calculator, Calendar } from 'lucide-react';
 
 interface StrategyPanelProps {

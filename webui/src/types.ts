@@ -1,8 +1,4 @@
-export enum MarketTrend {
-  BULLISH = 'Bullish',
-  BEARISH = 'Bearish',
-  NEUTRAL = 'Neutral'
-}
+export type MarketTrend = 'Bullish' | 'Bearish' | 'Neutral';
 
 export interface OHLCData {
   time: string;
@@ -83,3 +79,7 @@ export interface BacktestResult {
   trades: TradeRecord[];
   data: StockData[];
 }
+
+export type IndustrySentiment = Record<string, string | number>;
+
+export type MarketOverview = Record<string, string | number>;

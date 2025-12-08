@@ -1,6 +1,6 @@
 // webui/src/services/geminiService.ts
 
-import { Position, Strategy, MarketTrend } from '../types';
+import type { Position, Strategy, MarketTrend } from '../types';
 
 /**
  * 演示版 Gemini 服务：
@@ -44,9 +44,9 @@ export const chatWithQuantAI = async (
 ): Promise<string> => {
   // 同样给一个简单回声 + 一点提示，避免前端报错
   const hint =
-    context.trend === MarketTrend.BULLISH
+    context.trend === 'Bullish'
       ? '当前市场偏多头，注意不要满仓梭哈，留出一定安全垫。'
-      : context.trend === MarketTrend.BEARISH
+      : context.trend === 'Bearish'
       ? '当前市场偏空头，控制仓位、防止情绪化加仓是重点。'
       : '当前市场处于震荡区间，量化策略可以多做一些网格 / 高抛低吸类配置。';
 

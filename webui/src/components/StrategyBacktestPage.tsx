@@ -10,7 +10,6 @@ import {
   Activity, 
   TrendingUp, 
   BarChart2, 
-  Calendar, 
   Wallet, 
   Percent, 
   Hash,
@@ -157,7 +156,8 @@ const runMockBacktest = (
         // Signal Generation (Randomized based on strategy count)
         // In real logic, we would evaluate strategies here
         let action: 'BUY' | 'SELL' | 'NONE' = 'NONE';
-        const signalChance = strategies.length > 0 ? 0.05 : 0; // 5% chance per day if strategies selected
+        const modeFactor = mode === 'VOTING' ? 1.2 : mode === 'OR' ? 1 : 0.8;
+        const signalChance = strategies.length > 0 ? 0.05 * modeFactor : 0; // 5% base chance per day if strategies selected
         
         if (position === 0 && Math.random() < signalChance) action = 'BUY';
         else if (position > 0 && Math.random() < signalChance) action = 'SELL';
@@ -189,7 +189,6 @@ const runMockBacktest = (
         } else if (action === 'SELL' && position > 0) {
           const revenue = position * price;
           const fee = revenue * (params.feeRate / 10000);
-          const pnl = (price - entryPrice) * position - fee; // simplified
           const pnlPct = ((price - entryPrice) / entryPrice) * 100;
           
           capital += (revenue - fee);

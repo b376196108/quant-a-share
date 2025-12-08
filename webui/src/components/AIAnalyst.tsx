@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AIChatMessage, Position, Strategy } from '../types';
+import type { AIChatMessage, Position, Strategy } from '../types';
 import { analyzePortfolio, chatWithQuantAI } from '../services/geminiService';
-import { Send, Bot, Sparkles, X, User } from 'lucide-react';
+import { Send, Bot, Sparkles } from 'lucide-react';
 
 interface AIAnalystProps {
   positions: Position[];
@@ -42,13 +42,11 @@ const AIAnalyst: React.FC<AIAnalystProps> = ({ positions, strategies }) => {
     setInputValue('');
     setIsThinking(true);
 
-    // Prepare history for Gemini
-    const history = messages.map(m => ({
-      role: m.role === 'model' ? 'model' : 'user',
-      parts: [{ text: m.text }]
-    }));
-
-    const responseText = await chatWithQuantAI(history, userMsg.text);
+    const responseText = await chatWithQuantAI(userMsg.text, {
+      positions,
+      strategies,
+      trend: 'Neutral'
+    });
 
     const modelMsg: AIChatMessage = {
       id: (Date.now() + 1).toString(),

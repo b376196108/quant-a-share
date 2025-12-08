@@ -5,7 +5,7 @@ import StrategyPanel from './components/StrategyPanel';
 import AIAnalyst from './components/AIAnalyst';
 import MarketStats from './components/MarketStats';
 import StrategyBacktestPage from './components/StrategyBacktestPage'; // Use new page component
-import { StockData, Position, Strategy, IndustryData, MarketStatsData } from './types';
+import type { StockData, Position, Strategy, IndustryData, MarketStatsData } from './types';
 
 // ---------------------- 工具函数：后端字段兼容处理 ----------------------
 
@@ -13,40 +13,43 @@ import { StockData, Position, Strategy, IndustryData, MarketStatsData } from './
  * 将后端 /api/overview 返回的一行 JSON 映射为前端的 MarketStatsData
  * 做了多种字段名的兜底，避免列名稍有不同就直接报错。
  */
-const mapOverviewToMarketStats = (overview: any, fallback: MarketStatsData): MarketStatsData => {
+const mapOverviewToMarketStats = (
+  overview: Record<string, unknown> | null | undefined,
+  fallback: MarketStatsData,
+): MarketStatsData => {
   if (!overview || typeof overview !== 'object') {
     return fallback;
   }
 
-  const total =
-    overview['总股票数'] ??
-    overview['total_stocks'] ??
-    overview['stock_count'] ??
-    fallback.up + fallback.down + fallback.flat;
+  const toNumber = (value: unknown, fallbackValue = 0): number => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallbackValue;
+  };
 
-  const up =
-    overview['上涨家数'] ??
-    overview['up_count'] ??
-    overview['up_stocks'] ??
-    fallback.up;
+  const total = toNumber(
+    overview['总股票数'] ?? overview['total_stocks'] ?? overview['stock_count'],
+    fallback.up + fallback.down + fallback.flat,
+  );
 
-  const down =
-    overview['下跌家数'] ??
-    overview['down_count'] ??
-    overview['down_stocks'] ??
-    fallback.down;
+  const up = toNumber(
+    overview['上涨家数'] ?? overview['up_count'] ?? overview['up_stocks'],
+    fallback.up,
+  );
 
-  const limitUp =
-    overview['涨停家数'] ??
-    overview['limit_up'] ??
-    overview['limit_up_count'] ??
-    fallback.limitUp;
+  const down = toNumber(
+    overview['下跌家数'] ?? overview['down_count'] ?? overview['down_stocks'],
+    fallback.down,
+  );
 
-  const limitDown =
-    overview['跌停家数'] ??
-    overview['limit_down'] ??
-    overview['limit_down_count'] ??
-    fallback.limitDown;
+  const limitUp = toNumber(
+    overview['涨停家数'] ?? overview['limit_up'] ?? overview['limit_up_count'],
+    fallback.limitUp,
+  );
+
+  const limitDown = toNumber(
+    overview['跌停家数'] ?? overview['limit_down'] ?? overview['limit_down_count'],
+    fallback.limitDown,
+  );
 
   const upRatioRaw =
     overview['上涨占比'] ??
@@ -63,11 +66,11 @@ const mapOverviewToMarketStats = (overview: any, fallback: MarketStatsData): Mar
   const flat = Math.max(total - up - down, 0);
 
   return {
-    limitUp: Number(limitUp) || 0,
-    up: Number(up) || 0,
-    flat: Number(flat) || 0,
-    down: Number(down) || 0,
-    limitDown: Number(limitDown) || 0,
+    limitUp,
+    up,
+    flat,
+    down,
+    limitDown,
     sentimentScore,
   };
 };
@@ -75,12 +78,15 @@ const mapOverviewToMarketStats = (overview: any, fallback: MarketStatsData): Mar
 /**
  * 将 /api/industry-sentiment 返回的数组映射为 IndustryData[]
  */
-const mapIndustryList = (list: any[], fallback: IndustryData[]): IndustryData[] => {
+const mapIndustryList = (
+  list: Array<Record<string, unknown>> | null | undefined,
+  fallback: IndustryData[],
+): IndustryData[] => {
   if (!Array.isArray(list) || list.length === 0) {
     return fallback;
   }
 
-  const mapSentimentLabel = (label: any, change: number): 'High' | 'Medium' | 'Low' => {
+  const mapSentimentLabel = (label: unknown, change: number): 'High' | 'Medium' | 'Low' => {
     if (typeof label === 'string') {
       if (label.includes('高') || label.includes('热')) return 'High';
       if (label.includes('冰') || label.includes('低')) return 'Low';
@@ -160,10 +166,47 @@ const generateMarketData = (points: number): StockData[] => {
   return data;
 };
 
+const mapIndexKlineToStockData = (rows: unknown[]): StockData[] => {
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .map((row) => {
+      if (typeof row !== 'object' || row === null) {
+        return null;
+      }
+
+      const record = row as Record<string, unknown>;
+      const time =
+        (record.time as string | undefined) ??
+        (record.date as string | undefined) ??
+        (record.trade_date as string | undefined) ??
+        '';
+
+      const toNumber = (v: unknown, fallback = 0): number => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : fallback;
+      };
+
+      const close = toNumber(record.close);
+
+      return {
+        time,
+        open: toNumber(record.open),
+        high: toNumber(record.high),
+        low: toNumber(record.low),
+        close,
+        volume: toNumber(record.volume),
+        ma5: toNumber(record.ma5, close),
+        ma20: toNumber(record.ma20, close),
+      };
+    })
+    .filter((d): d is StockData => !!d && !!d.time);
+};
+
 // ---------------------- 默认 mock 数据（作为兜底） ----------------------
 
 const defaultIndustryData: IndustryData[] = [
-  { name: '白酒', name: '白酒', change: 2.35, sentiment: 'High' },
+  { name: '白酒', change: 2.35, sentiment: 'High' },
   { name: '新能源车', change: -1.2, sentiment: 'Low' },
   { name: '半导体', change: 0.85, sentiment: 'Medium' },
   { name: '银行', change: 0.45, sentiment: 'Medium' },
@@ -236,32 +279,43 @@ const initialStrategies: Strategy[] = [
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [marketData, setMarketData] = useState<StockData[]>(generateMarketData(60));
+  const [marketData, setMarketData] = useState<StockData[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>(initialStrategies);
   const [positions] = useState<Position[]>(initialPositions);
+
+  // 从后端获取上证指数 K 线数据，失败时回退到本地 mock
+  useEffect(() => {
+    const fetchIndexKline = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/api/index-kline?symbol=sh.000001&limit=90');
+
+        if (!res.ok) {
+          console.warn('index-kline 接口返回非 200：', res.status);
+          setMarketData(generateMarketData(60));
+          return;
+        }
+
+        const json = await res.json();
+        const series = mapIndexKlineToStockData(json);
+
+        if (series.length > 0) {
+          setMarketData(series);
+        } else {
+          console.warn('index-kline 返回数据为空，使用 mock 数据兜底');
+          setMarketData(generateMarketData(60));
+        }
+      } catch (err) {
+        console.error('获取指数 K 线失败：', err);
+        setMarketData(generateMarketData(60));
+      }
+    };
+
+    fetchIndexKline();
+  }, []);
 
   // 行业 & 市场统计：默认用 mock，接口成功后覆盖
   const [industryData, setIndustryData] = useState<IndustryData[]>(defaultIndustryData);
   const [marketStats, setMarketStats] = useState<MarketStatsData>(defaultMarketStats);
-
-  // Simulate Live Data update
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMarketData((prev) => {
-        // Just subtly update the last candle's close for "live" feel
-        const last = prev[prev.length - 1];
-        const newClose = last.close + (Math.random() - 0.5) * 2;
-        const updatedLast = {
-          ...last,
-          close: newClose,
-          high: Math.max(last.high, newClose),
-          low: Math.min(last.low, newClose),
-        };
-        return [...prev.slice(0, -1), updatedLast];
-      });
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
 
   // 从后端 FastAPI 拉取市场总览 & 行业情绪
   useEffect(() => {
@@ -391,7 +445,7 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-2 space-y-6">
               <div className="h-[450px]">
-                <MarketChart data={marketData} symbol="上证指数" />
+                <MarketChart data={marketData} symbol="上证指数 (000001.SH)" />
               </div>
               <MarketStats industryData={industryData} marketStats={marketStats} />
             </div>

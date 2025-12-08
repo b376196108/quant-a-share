@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Strategy, BacktestResult, StockData, TradeRecord } from '../types';
+import type { Strategy, BacktestResult, StockData, TradeRecord } from '../types';
 import MarketChart from './MarketChart';
-import { Play, Calendar, Search, BarChart2, TrendingUp, AlertCircle, Clock, Wallet } from 'lucide-react';
+import { Play, Calendar, Search, BarChart2, TrendingUp, Clock, Wallet } from 'lucide-react';
 
 interface BacktestPanelProps {
   strategies: Strategy[];
@@ -11,8 +11,9 @@ interface BacktestPanelProps {
 const simulateBacktest = (symbol: string, startDate: string, endDate: string, strategyId: string, initialCapital: number): BacktestResult => {
   const data: StockData[] = [];
   const trades: TradeRecord[] = [];
-  
-  let currentPrice = 100 + Math.random() * 50;
+
+  const strategyBias = strategyId.length % 10;
+  let currentPrice = 100 + Math.random() * 50 + strategyBias;
   const start = new Date(startDate);
   const end = new Date(endDate);
   const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));

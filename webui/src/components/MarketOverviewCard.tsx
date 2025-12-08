@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MarketOverview } from '../types';
+import type { MarketOverview } from '../types';
 
 const MarketOverviewCard: React.FC = () => {
   const [data, setData] = useState<MarketOverview | null>(null);
@@ -16,8 +16,9 @@ const MarketOverviewCard: React.FC = () => {
       }
       const jsonData = await response.json();
       setData(jsonData);
-    } catch (err: any) {
-      setError(err.message || '获取数据失败');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '获取数据失败';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -26,6 +27,16 @@ const MarketOverviewCard: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const asNumber = (value: string | number | undefined, fallback = 0): number => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const asString = (value: string | number | undefined): string => {
+    if (value === undefined) return '';
+    return String(value);
+  };
 
   const getSentimentClass = (sentiment: string) => {
     if (sentiment.includes('高潮') || sentiment.includes('热')) return 'sentiment-hot';
@@ -57,12 +68,24 @@ const MarketOverviewCard: React.FC = () => {
     );
   }
 
+  const tradeDate = asString(data['交易日'] as string | number | undefined);
+  const sentiment = asString(data['市场情绪'] as string | number | undefined);
+  const upRatio = asNumber(data['上涨占比'] as number | string | undefined);
+  const turnover = asNumber(data['总成交额(亿元)'] as number | string | undefined);
+  const totalStocks = asNumber(data['总股票数'] as number | string | undefined);
+  const limitUp = asNumber(data['涨停家数'] as number | string | undefined);
+  const limitDown = asNumber(data['跌停家数'] as number | string | undefined);
+  const upCount = asNumber(data['上涨家数'] as number | string | undefined);
+  const downCount = asNumber(data['下跌家数'] as number | string | undefined);
+  const avgChange = asNumber(data['平均涨幅(%)'] as number | string | undefined);
+  const medianChange = asNumber(data['中位数涨幅(%)'] as number | string | undefined);
+
   return (
     <div className="card">
       <h2 className="card-title">
         市场整体情绪概览
         <span style={{ fontSize: '0.8rem', fontWeight: 'normal', color: '#6b7280' }}>
-          {data["交易日"]}
+          {tradeDate}
         </span>
       </h2>
 
@@ -71,25 +94,25 @@ const MarketOverviewCard: React.FC = () => {
         {/* Sentiment Banner */}
         <div style={{ textAlign: 'center', padding: '10px 0' }}>
           <div className="metric-label">当前市场情绪</div>
-          <div className={`sentiment-tag ${getSentimentClass(data["市场情绪"])}`} style={{ fontSize: '1.2rem', padding: '6px 20px', marginTop: '5px' }}>
-            {data["市场情绪"]}
+          <div className={`sentiment-tag ${getSentimentClass(sentiment)}`} style={{ fontSize: '1.2rem', padding: '6px 20px', marginTop: '5px' }}>
+            {sentiment}
           </div>
         </div>
 
         {/* Up/Down Bar */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.9rem' }}>
-            <span className="text-up">上涨: {data["上涨家数"]}</span>
-            <span className="text-down">下跌: {data["下跌家数"]}</span>
+            <span className="text-up">上涨: {upCount}</span>
+            <span className="text-down">下跌: {downCount}</span>
           </div>
           <div className="progress-bar-container">
             <div 
               className="progress-bar-fill" 
-              style={{ width: `${(data["上涨占比"] * 100).toFixed(1)}%` }}
+              style={{ width: `${(upRatio * 100).toFixed(1)}%` }}
             ></div>
           </div>
           <div style={{ textAlign: 'right', fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
-            上涨占比: {(data["上涨占比"] * 100).toFixed(1)}%
+            上涨占比: {(upRatio * 100).toFixed(1)}%
           </div>
         </div>
 
@@ -97,24 +120,24 @@ const MarketOverviewCard: React.FC = () => {
         <div className="metric-grid">
           <div className="metric-item">
             <span className="metric-label">总成交额</span>
-            <span className="metric-value">{data["总成交额(亿元)"].toLocaleString()} 亿</span>
+            <span className="metric-value">{turnover.toLocaleString()} 亿</span>
           </div>
           <div className="metric-item">
             <span className="metric-label">总股票数</span>
-            <span className="metric-value">{data["总股票数"]}</span>
+            <span className="metric-value">{totalStocks}</span>
           </div>
           <div className="metric-item">
             <span className="metric-label">涨停 / 跌停</span>
             <span className="metric-value">
-              <span className="text-up">{data["涨停家数"]}</span> / <span className="text-down">{data["跌停家数"]}</span>
+              <span className="text-up">{limitUp}</span> / <span className="text-down">{limitDown}</span>
             </span>
           </div>
           <div className="metric-item">
             <span className="metric-label">平均 / 中位涨幅</span>
             <span className="metric-value">
-              <span className={data["平均涨幅(%)"] >= 0 ? 'text-up' : 'text-down'}>{data["平均涨幅(%)"]}%</span>
+              <span className={avgChange >= 0 ? 'text-up' : 'text-down'}>{avgChange}%</span>
               {' / '}
-              <span className={data["中位数涨幅(%)"] >= 0 ? 'text-up' : 'text-down'}>{data["中位数涨幅(%)"]}%</span>
+              <span className={medianChange >= 0 ? 'text-up' : 'text-down'}>{medianChange}%</span>
             </span>
           </div>
         </div>

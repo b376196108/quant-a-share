@@ -1,5 +1,5 @@
 import React from 'react';
-import { Position } from '../types';
+import type { Position } from '../types';
 import { ArrowUpRight, ArrowDownRight, MoreHorizontal } from 'lucide-react';
 
 interface HoldingsTableProps {
