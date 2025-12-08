@@ -1,18 +1,14 @@
-// webui/src/services/geminiService.ts
+﻿// webui/src/services/geminiService.ts
 
-import type { Position, Strategy, MarketTrend } from '../types';
+import type { Position, Strategy, MarketTrend, NewsItem } from '../types';
 
 /**
- * 演示版 Gemini 服务：
- * 先不真连 Google AI，避免因为环境变量 / 网络问题把整个前端页面搞崩。
- * 以后如果要接正式的 Gemini，再在这里替换实现即可。
+ * Demo Gemini service placeholders. No external API calls to keep dev env simple.
  */
-
 export const analyzePortfolio = async (
   positions: Position[],
   strategies: Strategy[]
 ): Promise<string> => {
-  // 简单拼一段“持仓+策略总结”的文案，假装是 AI 分析结果
   const totalPositions = positions.length;
   const winning = positions.filter(p => p.pnlPercent > 0).length;
   const losing = positions.filter(p => p.pnlPercent <= 0).length;
@@ -25,12 +21,12 @@ export const analyzePortfolio = async (
   const activeStrategies = strategies.filter(s => s.status === 'active').length;
 
   return [
-    '【演示模式｜本回答未调用真实 AI】',
+    '[Demo mode | No real Gemini call]',
     '',
-    `当前持仓共 ${totalPositions} 个标的，其中盈利 ${winning} 个、亏损 ${losing} 个，整体平均收益率约为 ${avgPnl.toFixed(2)}%。`,
-    `正在运行的量化策略共有 ${activeStrategies} 个，建议控制单一策略和单一行业的集中度，防止回撤过度集中。`,
+    `Holdings: ${totalPositions} positions (${winning} up / ${losing} down), avg PnL ~${avgPnl.toFixed(2)}%.`,
+    `Active strategies: ${activeStrategies}. Keep concentration and drawdown in check.`,
     '',
-    '后续接入真实 Gemini API 后，我可以基于更多历史数据、波动率、回撤曲线给出更精细的风险评估和调仓建议。'
+    'Hook up the real Gemini API later for richer analysis.'
   ].join('\n');
 };
 
@@ -42,21 +38,34 @@ export const chatWithQuantAI = async (
     trend: MarketTrend;
   }
 ): Promise<string> => {
-  // 同样给一个简单回声 + 一点提示，避免前端报错
   const hint =
     context.trend === 'Bullish'
-      ? '当前市场偏多头，注意不要满仓梭哈，留出一定安全垫。'
+      ? 'Market leans bullish; avoid overexposure and leave some safety buffer.'
       : context.trend === 'Bearish'
-      ? '当前市场偏空头，控制仓位、防止情绪化加仓是重点。'
-      : '当前市场处于震荡区间，量化策略可以多做一些网格 / 高抛低吸类配置。';
+      ? 'Market leans bearish; manage sizing and avoid emotional averaging down.'
+      : 'Market is range-bound; grid/mean-reversion styles may fit better.';
 
   return [
-    '【演示模式｜聊天未调用真实 AI】',
+    '[Demo mode | Chat not calling real Gemini]',
     '',
-    `你刚才说：${userMessage}`,
+    `You said: ${userMessage}`,
     '',
-    `结合你当前的持仓与策略配置，给一个通用提示：${hint}`,
+    `Context hint: ${hint}`,
     '',
-    '等你后面配置好 Gemini API Key 之后，这里会返回更贴合你账户和策略的专业回答。'
+    'Provide a Gemini API key later for tailored responses.'
+  ].join('\n');
+};
+
+export const generateDailyBriefing = async (news: NewsItem[]): Promise<string> => {
+  const total = news.length;
+  const bullish = news.filter(n => n.sentiment === 'Bullish').length;
+  const bearish = news.filter(n => n.sentiment === 'Bearish').length;
+
+  return [
+    '【演示模式｜未真实调用 Gemini】',
+    total > 0
+      ? `共收到 ${total} 条新闻，其中多头 ${bullish} 条、空头 ${bearish} 条。`
+      : '当前未提供新闻列表，将使用默认示例进行判断。',
+    '等后端接入真实财经新闻和 Gemini API 后，这里会生成每日市场早报摘要。'
   ].join('\n');
 };

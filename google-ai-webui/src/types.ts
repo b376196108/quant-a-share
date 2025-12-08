@@ -1,4 +1,8 @@
-export type MarketTrend = 'Bullish' | 'Bearish' | 'Neutral';
+export enum MarketTrend {
+  BULLISH = 'Bullish',
+  BEARISH = 'Bearish',
+  NEUTRAL = 'Neutral'
+}
 
 export interface OHLCData {
   time: string;
@@ -80,30 +84,8 @@ export interface BacktestResult {
   data: StockData[];
 }
 
-export interface StrategyParamSchema {
-  key: string;
-  label: string;
-  type: 'int' | 'float' | 'select' | 'string';
-  min?: number;
-  max?: number;
-  step?: number;
-  options?: { value: string | number; label: string }[];
-}
+// --- New Types for Forecast & Settings ---
 
-export interface StrategyConfig {
-  id: string;
-  name: string;
-  enabled: boolean;
-  description?: string;
-  params: Record<string, number | string>;
-  schema: StrategyParamSchema[];
-}
-
-export type IndustrySentiment = Record<string, string | number>;
-
-export type MarketOverview = Record<string, string | number>;
-
-// Forecast types
 export interface StockForecastPoint {
   date: string;
   predicted_close: number;
@@ -121,12 +103,48 @@ export interface StockForecastResponse {
   forecast: StockForecastPoint[];
 }
 
-export interface NewsItem {
+export interface StrategyParamSchema {
+  key: string;
+  label: string;
+  type: "int" | "float" | "select" | "string";
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: { value: string | number; label: string }[];
+}
+
+export interface StrategyConfig {
   id: string;
-  title: string;
-  summary: string;
-  source: string;
-  time: string;
-  sentiment: MarketTrend;
-  tags: string[];
+  name: string;
+  enabled: boolean;
+  description?: string;
+  params: Record<string, number | string>;
+  schema: StrategyParamSchema[];
+}
+
+export interface MarketOverview {
+  "交易日": string;
+  "市场情绪": string;
+  "上涨家数": number;
+  "下跌家数": number;
+  "上涨占比": number;
+  "总成交额(亿元)": number;
+  "总股票数": number;
+  "涨停家数": number;
+  "跌停家数": number;
+  "平均涨幅(%)": number;
+  "中位数涨幅(%)": number;
+}
+
+export interface IndustrySentiment {
+  "行业": string;
+  "情绪": string;
+  "平均涨幅(%)": number;
+  "中位涨幅(%)": number;
+  "上涨占比": number;
+  "总成交额(亿元)": number;
+  "上涨家数": number;
+  "下跌家数": number;
+  "涨停家数": number;
+  "跌停家数": number;
 }

@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, LineChart, Cpu, Settings, Bell, Search } from 'lucide-react';
+import { LayoutDashboard, LineChart, Settings, Bell, Search, TrendingUp, Newspaper } from 'lucide-react';
 import MarketChart from './components/MarketChart';
 import StrategyPanel from './components/StrategyPanel';
 import AIAnalyst from './components/AIAnalyst';
 import MarketStats from './components/MarketStats';
 import StrategyBacktestPage from './components/StrategyBacktestPage'; // Use new page component
+import StockForecastPage from './components/StockForecastPage';
+import StrategySettingsPage from './components/StrategySettingsPage';
+import NewsPage from './components/NewsPage';
 import type { StockData, Position, Strategy, IndustryData, MarketStatsData } from './types';
 
 // ---------------------- 工具函数：后端字段兼容处理 ----------------------
@@ -375,7 +378,8 @@ const App: React.FC = () => {
           {[
             { id: 'dashboard', icon: LayoutDashboard, label: '大盘总览 Dashboard' },
             { id: 'backtest', icon: LineChart, label: '策略回测 Backtest' },
-            { id: 'strategies', icon: Cpu, label: '策略实验室 Algo Lab' },
+            { id: 'forecast', icon: TrendingUp, label: '走势预测 Forecast' },
+            { id: 'news', icon: Newspaper, label: '财经新闻 News' },
             { id: 'settings', icon: Settings, label: '系统设置 System' },
           ].map((item) => (
             <button
@@ -405,7 +409,8 @@ const App: React.FC = () => {
             <h1 className="text-2xl font-bold text-white">
               {activeTab === 'dashboard' && 'A股市场全景 (A-Share Overview)'}
               {activeTab === 'backtest' && '策略回测 (Strategy Backtesting)'}
-              {activeTab === 'strategies' && '策略实验室 (Algorithm Lab)'}
+              {activeTab === 'forecast' && '走势预测 (AI Market Forecast)'}
+              {activeTab === 'news' && '财经新闻快讯 (Financial News)'}
               {activeTab === 'settings' && '系统设置 (System)'}
             </h1>
             <p className="text-slate-400 text-sm mt-1">
@@ -458,14 +463,11 @@ const App: React.FC = () => {
 
         {activeTab === 'backtest' && <StrategyBacktestPage />}
 
-        {/* Placeholder for other tabs */}
-        {(activeTab === 'strategies' || activeTab === 'settings') && (
-          <div className="flex flex-col items-center justify-center h-[600px] text-slate-500 bg-slate-800/30 rounded-xl border border-slate-700 border-dashed">
-            <Cpu size={64} className="mb-4 opacity-30" />
-            <p className="text-lg">功能模块开发中...</p>
-            <p className="text-sm">Module Under Construction</p>
-          </div>
-        )}
+        {activeTab === 'forecast' && <StockForecastPage />}
+
+        {activeTab === 'news' && <NewsPage />}
+
+        {activeTab === 'settings' && <StrategySettingsPage />}
       </main>
     </div>
   );
