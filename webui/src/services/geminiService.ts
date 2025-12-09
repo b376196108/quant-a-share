@@ -15,7 +15,8 @@ export const analyzePortfolio = async (
 
   const avgPnl =
     positions.length > 0
-      ? positions.reduce((sum, p) => sum + p.pnlPercent, 0) / positions.length
+      ? positions.reduce((sum, p) => sum + p.pnlPercent, 0) /
+        positions.length
       : 0;
 
   const activeStrategies = strategies.filter(s => s.status === 'active').length;
@@ -23,10 +24,12 @@ export const analyzePortfolio = async (
   return [
     '[Demo mode | No real Gemini call]',
     '',
-    `Holdings: ${totalPositions} positions (${winning} up / ${losing} down), avg PnL ~${avgPnl.toFixed(2)}%.`,
+    `Holdings: ${totalPositions} positions (${winning} up / ${losing} down), avg PnL ~${avgPnl.toFixed(
+      2
+    )}%.`,
     `Active strategies: ${activeStrategies}. Keep concentration and drawdown in check.`,
     '',
-    'Hook up the real Gemini API later for richer analysis.'
+    'Hook up the real Gemini API later for richer analysis.',
   ].join('\n');
 };
 
@@ -52,11 +55,13 @@ export const chatWithQuantAI = async (
     '',
     `Context hint: ${hint}`,
     '',
-    'Provide a Gemini API key later for tailored responses.'
+    'Provide a Gemini API key later for tailored responses.',
   ].join('\n');
 };
 
-export const generateDailyBriefing = async (news: NewsItem[]): Promise<string> => {
+export const generateDailyBriefing = async (
+  news: NewsItem[]
+): Promise<string> => {
   const total = news.length;
   const bullish = news.filter(n => n.sentiment === 'Bullish').length;
   const bearish = news.filter(n => n.sentiment === 'Bearish').length;
@@ -66,6 +71,6 @@ export const generateDailyBriefing = async (news: NewsItem[]): Promise<string> =
     total > 0
       ? `共收到 ${total} 条新闻，其中多头 ${bullish} 条、空头 ${bearish} 条。`
       : '当前未提供新闻列表，将使用默认示例进行判断。',
-    '等后端接入真实财经新闻和 Gemini API 后，这里会生成每日市场早报摘要。'
+    '等后端接入真实财经新闻和 Gemini API 后，这里会生成每日市场早报摘要。',
   ].join('\n');
 };

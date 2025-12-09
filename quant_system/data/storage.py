@@ -140,6 +140,23 @@ def _df_to_records(df: pd.DataFrame, columns: List[str]) -> List[tuple]:
     return [tuple(row[col] for col in columns) for _, row in df.iterrows()]
 
 
+def _coerce_numeric(series, col_name: str, context: str) -> pd.Series:
+    """
+    Convert a Series-like object to numeric, handling duplicated columns gracefully.
+    """
+    try:
+        return pd.to_numeric(series, errors="coerce")
+    except TypeError:
+        if isinstance(series, pd.DataFrame):
+            print(
+                f"[storage] {context}: column '{col_name}' duplicated; using the first occurrence for numeric conversion"
+            )
+            return pd.to_numeric(series.iloc[:, 0], errors="coerce")
+
+        print(f"[storage] {context}: failed to convert column '{col_name}' (type={type(series)}) to numeric; treating as NaN")
+        return pd.to_numeric(pd.Series(series), errors="coerce")
+
+
 def upsert_stock_info(df: pd.DataFrame) -> None:
     """Upsert stock basic info by code."""
     if df is None or df.empty:
@@ -222,15 +239,19 @@ def upsert_stock_industry(df: pd.DataFrame) -> None:
 
 def _prepare_daily_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    # 去重字段，避免 pct_chg 重复导致行值变成 Series
+    df = df.loc[:, ~df.columns.duplicated()]
     if "date" in df.columns:
         df.rename(columns={"date": "trade_date"}, inplace=True)
     df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce").dt.strftime("%Y-%m-%d")
     numeric_cols = [c for c in df.columns if c not in {"trade_date", "code"}]
     for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = _coerce_numeric(df[col], col, "_prepare_daily_df")
     # normalize pctChg to pct_chg
     if "pctChg" in df.columns:
-        df["pct_chg"] = df["pctChg"]
+        df = df.rename(columns={"pctChg": "pct_chg"})
+    if "pct_chg" not in df.columns:
+        df["pct_chg"] = None
     return df
 
 
@@ -332,7 +353,7 @@ def _load_daily(
     df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
     numeric_cols = [c for c in df.columns if c not in {"trade_date", "code"}]
     for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = _coerce_numeric(df[col], col, "_load_daily")
     df = df.set_index(["trade_date", "code"])
     return df
 

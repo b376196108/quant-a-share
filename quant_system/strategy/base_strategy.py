@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from dataclasses import dataclass, field, asdict
+from enum import Enum
+from typing import Any, Dict, Optional, List
 
 import pandas as pd
 
@@ -69,3 +70,65 @@ class BaseStrategy(ABC):
             - 值域只允许 {-1, 0, 1}
         """
         raise NotImplementedError
+    
+class StrategyCategory(str, Enum):
+    """策略大类，对齐前端：趋势 / 反转 / 波动率 / 成交量。"""
+    TREND = "trend"
+    REVERSAL = "reversal"
+    VOLATILITY = "volatility"
+    VOLUME = "volume"
+
+
+@dataclass
+class StrategyParamMeta:
+    """单个参数的元数据，用于前端渲染表单和后端校验。"""
+    name: str                # 参数字段名，例如 "rsi_period"
+    label: str               # 中文名，例如 "RSI周期"
+    type: str                # "int" | "float" | "bool" | "str"
+    default: Any
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    step: Optional[float] = None
+    description: str = ""
+
+
+@dataclass
+class StrategyMeta:
+    """策略元信息，既给前端用，也给回测引擎用。"""
+    id: str                      # 全局唯一ID，例如 "connors_rsi2"
+    name: str                    # 中文名称
+    category: StrategyCategory   # 策略大类
+    description: str             # 简要说明
+    params: Dict[str, StrategyParamMeta] = field(default_factory=dict)
+    tags: List[str] = field(default_factory=list)  # 可选：如 ["均值回归", "高胜率"]
+
+
+class PluggableStrategy(BaseStrategy):
+    """
+    带有元信息的策略基类，所有“策略插件”都继承它。
+    注意：仍然沿用 BaseStrategy 的 generate_signals 接口（返回 signal 序列）。
+    """
+
+    meta: StrategyMeta  # 每个子类必须定义
+
+    def __init__(self, params: Optional[Dict[str, Any]] = None) -> None:
+        # 先用元信息里的默认值，再用外部传入覆盖
+        merged: Dict[str, Any] = {
+            name: p.default for name, p in self.meta.params.items()
+        }
+        if params:
+            merged.update(params)
+        super().__init__(merged)
+
+    @classmethod
+    def get_meta(cls) -> Dict[str, Any]:
+        """
+        给 API / 前端用：返回可 JSON 化的元信息字典。
+        """
+        data = asdict(cls.meta)
+        data["category"] = cls.meta.category.value
+        # params 从对象 -> dict
+        data["params"] = {
+            name: asdict(p) for name, p in cls.meta.params.items()
+        }
+        return data

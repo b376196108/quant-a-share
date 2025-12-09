@@ -1,3 +1,4 @@
+// webui/src/components/StrategyPanel.tsx
 import React, { useState } from 'react';
 import type { Strategy } from '../types';
 import { Play, Pause, Activity, Search, Calculator, Calendar } from 'lucide-react';
@@ -7,17 +8,22 @@ interface StrategyPanelProps {
   onToggleStrategy: (id: string) => void;
 }
 
-const StrategyPanel: React.FC<StrategyPanelProps> = ({ strategies, onToggleStrategy }) => {
+const StrategyPanel: React.FC<StrategyPanelProps> = ({
+  strategies,
+  onToggleStrategy,
+}) => {
   const [selectedStock, setSelectedStock] = useState('600519');
   const [startDate, setStartDate] = useState('2015-01-01');
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]); // Default to today
+  const [endDate, setEndDate] = useState(
+    new Date().toISOString().split('T')[0]
+  );
   const [isBacktesting, setIsBacktesting] = useState(false);
 
   const handleRunBacktest = () => {
     setIsBacktesting(true);
     setTimeout(() => {
       setIsBacktesting(false);
-      // In a real app, this would update stats based on the selected date range
+      // 这里预留给未来：根据区间更新一些统计
     }, 2000);
   };
 
@@ -28,107 +34,119 @@ const StrategyPanel: React.FC<StrategyPanelProps> = ({ strategies, onToggleStrat
         策略运行实验室
       </h3>
 
-      {/* Backtest Configuration Panel */}
+      {/* 回测配置区域 */}
       <div className="mb-6 bg-slate-900/50 p-4 rounded-lg border border-slate-700 space-y-4">
-        
-        {/* Stock Selection */}
+        {/* 标的选择 */}
         <div>
-          <label className="text-xs text-slate-400 mb-1.5 block uppercase tracking-wider font-semibold">标的股票 (Target Asset)</label>
+          <label className="text-xs text-slate-400 mb-1.5 block uppercase tracking-wider font-semibold">
+            标的股票 (Target Asset)
+          </label>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-            <input 
-              type="text" 
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+              size={16}
+            />
+            <input
+              type="text"
               value={selectedStock}
-              onChange={(e) => setSelectedStock(e.target.value)}
+              onChange={e => setSelectedStock(e.target.value)}
               placeholder="输入代码 (如 600519)"
               className="w-full bg-slate-800 border border-slate-600 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-purple-500 font-mono"
             />
           </div>
         </div>
 
-        {/* Date Range Selection */}
+        {/* 回测区间 */}
         <div>
-           <label className="text-xs text-slate-400 mb-1.5 block uppercase tracking-wider font-semibold flex items-center gap-1">
-             <Calendar size={12} /> 回测区间 (Backtest Period)
-           </label>
-           <div className="flex items-center gap-2">
-             <input 
-                type="date" 
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
-             />
-             <span className="text-slate-500">-</span>
-             <input 
-                type="date" 
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
-             />
-           </div>
+          <label className="text-xs text-slate-400 mb-1.5 block uppercase tracking-wider font-semibold flex items-center gap-1">
+            <Calendar size={12} />
+            回测区间 (Backtest Period)
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+            />
+            <span className="text-slate-500">-</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+            />
+          </div>
         </div>
 
-        {/* Action Button */}
-        <button 
+        {/* 占位——以后可以加手续费、滑点等参数 */}
+        <div>
+          <label className="text-xs text-slate-400 mb-1.5 block uppercase tracking-wider font-semibold flex items-center gap-1">
+            <Calculator size={12} />
+            参数预留 (Params)
+          </label>
+          <p className="text-xs text-slate-500">
+            暂时仅作演示，未来可以在这里增加手续费、滑点、仓位等参数。
+          </p>
+        </div>
+
+        {/* 运行按钮 */}
+        <button
           onClick={handleRunBacktest}
           disabled={isBacktesting}
-          className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors shadow-lg shadow-purple-900/20"
+          className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-400 text-white py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all"
         >
-          {isBacktesting ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Calculator size={16} />}
-          开始回测 (Run Backtest)
+          {isBacktesting ? (
+            <>
+              <Pause size={16} className="animate-pulse" />
+              正在模拟回测...
+            </>
+          ) : (
+            <>
+              <Play size={16} />
+              快速测试选中策略
+            </>
+          )}
         </button>
       </div>
-      
-      {/* Strategies List */}
-      <div className="space-y-4 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-        {strategies.map((strategy) => (
-          <div key={strategy.id} className="bg-slate-700/50 rounded-lg p-4 border border-slate-600 hover:border-slate-500 transition-all">
-            <div className="flex justify-between items-start mb-3">
+
+      {/* 已选策略列表 */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
+            已选策略 (Active Strategies)
+          </span>
+        </div>
+        <div className="space-y-2">
+          {strategies.map(s => (
+            <div
+              key={s.id}
+              className="flex items-center justify-between bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2"
+            >
               <div>
-                <h4 className="font-semibold text-white text-md flex items-center gap-2">
-                   {strategy.name}
-                   {strategy.status === 'active' && <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>}
-                </h4>
-                <p className="text-xs text-slate-400 mt-1 line-clamp-2">{strategy.description}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-100 font-medium">
+                    {s.name}
+                  </span>
+                  {s.status === 'active' && (
+                    <span className="inline-flex px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] border border-emerald-500/40">
+                      ACTIVE
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
+                  {s.description}
+                </p>
               </div>
-            </div>
-
-            {/* Strategy Stats */}
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <div className="bg-slate-800/80 rounded p-2 text-center">
-                <span className="text-slate-500 text-[10px] block uppercase">Return</span>
-                <span className={`font-mono text-sm font-bold ${strategy.returnRate >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {strategy.returnRate}%
-                </span>
-              </div>
-              <div className="bg-slate-800/80 rounded p-2 text-center">
-                <span className="text-slate-500 text-[10px] block uppercase">Drawdown</span>
-                <span className="text-emerald-400 font-mono text-sm font-bold">-{strategy.drawdown}%</span>
-              </div>
-              <div className="bg-slate-800/80 rounded p-2 text-center">
-                <span className="text-slate-500 text-[10px] block uppercase">Sharpe</span>
-                <span className="text-blue-400 font-mono text-sm font-bold">{strategy.sharpeRatio}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center border-t border-slate-600/50 pt-3 mt-2">
-              <span className="text-xs text-slate-500">
-                区间: <span className="text-slate-300 font-mono">{startDate.split('-')[0]}..{endDate.split('-')[0]}</span>
-              </span>
-              <button 
-                onClick={() => onToggleStrategy(strategy.id)}
-                className={`text-xs px-3 py-1.5 rounded font-medium flex items-center gap-1 transition-colors ${
-                  strategy.status === 'active' 
-                    ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' 
-                    : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                }`}
+              <button
+                onClick={() => onToggleStrategy(s.id)}
+                className="text-xs text-slate-400 hover:text-red-400 transition-colors"
               >
-                {strategy.status === 'active' ? <Pause size={12} /> : <Play size={12} />}
-                {strategy.status === 'active' ? '停止' : '运行'}
+                切换
               </button>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );

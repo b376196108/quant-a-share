@@ -1,0 +1,82 @@
+① 本地覆盖云端（以本地为准，把云端改成跟本地一模一样）
+
+使用场景：
+你已经在本地改好了代码，确认「以本地版本为准」，让 GitHub 跟着本地走。
+
+步骤
+
+看看本地有没有没提交的改动
+
+git status
+
+
+把本地改动全部提交（必须先 commit 才能推上云端）
+
+git add .
+git commit -m "你的提交说明"
+
+
+正常推送（云端没有你不想要的新提交时，用这个就够了）
+
+git push origin main
+
+
+如果提示「remote 有新的提交，push 被拒绝，但你就是要用本地覆盖远程」：
+确认云端那几次提交不要了，再用带保护的强推：
+
+git push --force-with-lease origin main
+
+--------------------------------------------------------------------------------
+
+② 云端覆盖本地（以云端为准，把本地改成跟云端一模一样）
+
+使用场景：
+你认为 GitHub 上的版本才是正确的，希望「本地全部回到云端最新状态」。
+
+情况 A：本地没有未提交改动，只是比云端落后
+
+直接拉取更新（推荐写法）：
+
+git pull --ff-only origin main
+
+
+完成后查看：
+
+git status
+
+
+正常显示：
+
+On branch main
+Your branch is up to date with 'origin/main'.
+nothing to commit, working tree clean
+
+情况 B：本地有改动，而且你决定全部丢弃，用云端完全覆盖
+
+注意：这会丢失本地未提交的修改，确认不要再用这些改动了再执行。
+
+拉取最新远程信息：
+
+git fetch origin
+
+
+用远程 origin/main 强制覆盖本地 main（已跟踪文件）：
+
+git reset --hard origin/main
+
+
+如果连本地新建但未跟踪的文件/目录也想一起删掉（彻底回到云端状态）：
+
+git clean -fd
+
+
+检查结果：
+
+git status
+
+
+应该看到：
+
+On branch main
+Your branch is up to date with 'origin/main'.
+nothing to commit, working tree clean

@@ -1,9 +1,22 @@
-"""单标的日线回测引擎（最小可用版本）。"""
+# quant_system/backtest/engine.py
+"""
+单标的日线回测引擎 + 多策略组合封装。
+
+分两层：
+1）BacktestEngine / BacktestConfig
+    - 保持你原来的实现：输入已经带有 `signal` 列的 DataFrame，输出 BacktestResult。
+2）run_single_backtest / combine_signals
+    - 负责：
+        * 从数据模块取日线行情（get_stock_data）
+        * 通过策略注册表创建策略实例（create_strategy）
+        * 生成每个策略的信号并按组合方式合成（AND / OR / Voting）
+        * 调用 BacktestEngine.run() 完成真实回测
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -14,6 +27,14 @@ from quant_system.backtest.performance import (
     calc_max_drawdown,
     calc_sharpe,
 )
+from quant_system.data.fetcher import get_stock_data
+from quant_system.strategy.base_strategy import StrategyContext
+from quant_system.strategy.registry import create_strategy
+
+
+# =====================================================================
+# 一、底层回测引擎（保留你原来的实现）
+# =====================================================================
 
 
 @dataclass
@@ -64,10 +85,12 @@ class BacktestEngine:
 
             price = float(row["close"])
             if np.isnan(price) or price <= 0:
-                equity_list.append(cash + position * price if not np.isnan(price) else cash)
+                equity_list.append(
+                    cash + position * price if not np.isnan(price) else cash
+                )
                 continue
 
-            # 买入
+            # 买入：当前空仓且目标信号为 1 → 全仓买入
             if position == 0 and signal == 1:
                 trade_price = price + cfg.slippage
                 shares = int(cash // trade_price)
@@ -88,7 +111,7 @@ class BacktestEngine:
                         }
                     )
 
-            # 卖出/平仓
+            # 卖出/平仓：当前有仓位且目标信号为 0 → 全部卖出
             elif position > 0 and signal == 0:
                 trade_price = price - cfg.slippage
                 amount = trade_price * position
@@ -113,9 +136,13 @@ class BacktestEngine:
         equity_curve = pd.Series(equity_list, index=df.index, name="equity")
         returns = equity_curve.pct_change().fillna(0.0)
 
-        stats = {
-            "total_return": float(equity_curve.iloc[-1] / cfg.initial_cash - 1.0)
-        } if not equity_curve.empty else {"total_return": 0.0}
+        if not equity_curve.empty:
+            stats = {
+                "total_return": float(equity_curve.iloc[-1] / cfg.initial_cash - 1.0)
+            }
+        else:
+            stats = {"total_return": 0.0}
+
         stats["annual_return"] = calc_annual_return(returns)
         stats["max_drawdown"] = calc_max_drawdown(equity_curve)
         stats["sharpe"] = calc_sharpe(returns)
@@ -129,4 +156,159 @@ class BacktestEngine:
         )
 
 
-__all__ = ["BacktestEngine", "BacktestConfig"]
+# =====================================================================
+# 二、多策略信号组合 & 单标的回测封装
+# =====================================================================
+
+
+def combine_signals(signals: List[pd.Series], mode: str = "OR") -> pd.Series:
+    """
+    将多个策略信号按指定模式合成一个最终 signal 序列。
+
+    参数：
+        signals : 若干个 pd.Series，每个取值一般在 {-1, 0, 1}
+        mode    : "AND" / "OR" / "VOTING"
+
+    返回：
+        combined : pd.Series，index 为日期，name="signal"
+    """
+    if not signals:
+        raise ValueError("signals 为空，至少需要一个策略信号")
+
+    # 对齐索引，空值按 0 处理
+    sig_df = pd.concat(signals, axis=1).fillna(0)
+    sig_df = sig_df.astype(float)
+
+    mode_upper = mode.upper()
+
+    if mode_upper == "AND":
+        # 所有策略都看多（>0）才 1；其余视为 0
+        combined = (sig_df.gt(0).all(axis=1)).astype(int)
+
+    elif mode_upper == "VOTING":
+        # 多数表决：对每个策略取 sign，再按行求和
+        sign_matrix = np.sign(sig_df.values)
+        sum_sign = sign_matrix.sum(axis=1)
+        combined = pd.Series(0, index=sig_df.index)
+        combined[sum_sign > 0] = 1
+        combined[sum_sign < 0] = -1
+
+    else:  # 默认 OR
+        # 只要有一个策略看多（>0）就 1，否则 0
+        combined = (sig_df.gt(0).any(axis=1)).astype(int)
+
+    combined.name = "signal"
+    return combined
+
+
+def run_single_backtest(
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    strategy_ids: List[str],
+    mode: str = "OR",
+    strategy_params: Optional[Dict[str, Dict[str, Any]]] = None,
+    initial_cash: float = 100_000.0,
+    fee_rate: float = 0.0005,
+    slippage: float = 0.0,
+) -> BacktestResult:
+    """
+    高层封装：单只股票 + 多策略组合回测。
+
+    这就是后面 FastAPI /api/backtest/run 可以直接调用的核心函数。
+
+    参数：
+        symbol          : 股票代码（如 "600519"）
+        start_date      : 回测开始日期 "YYYY-MM-DD"
+        end_date        : 回测结束日期 "YYYY-MM-DD"
+        strategy_ids    : 参与组合的策略 id 列表（如 ["connors_rsi2"]）
+        mode            : 组合方式，"AND" / "OR" / "VOTING"
+        strategy_params : 每个策略的参数字典，key=策略 id，value=参数 dict，可为 None
+        initial_cash    : 初始资金
+        fee_rate        : 手续费率（万分之 2.5 就填 0.00025）
+        slippage        : 单边滑点（元）
+
+    返回：
+        BacktestResult（与 BacktestEngine.run 一致）
+    """
+    if not strategy_ids:
+        raise ValueError("strategy_ids 为空，至少选择一个策略")
+
+    params_map: Dict[str, Dict[str, Any]] = strategy_params or {}
+
+    # 1) 拉取日线行情
+    df = get_stock_data(symbol, start_date, end_date)
+    if df is None or df.empty:
+        raise ValueError(f"没有 {symbol} 在 {start_date}~{end_date} 的历史数据")
+
+    # 确保索引是 DatetimeIndex
+    if not isinstance(df.index, pd.DatetimeIndex):
+        if "date" in df.columns:
+            df = df.copy()
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+            df = df.dropna(subset=["date"]).set_index("date")
+        else:
+            raise ValueError("stock 数据既不是 DatetimeIndex 索引，也没有 'date' 列")
+
+    df = df.sort_index()
+
+    # 2) 逐个策略生成信号
+    signals: List[pd.Series] = []
+    ctx = StrategyContext(
+        code=symbol,
+        initial_cash=initial_cash,
+        fee_rate=fee_rate,
+        slippage=slippage,
+        extra={},
+    )
+
+    for sid in strategy_ids:
+        params = params_map.get(sid) or {}
+        strategy = create_strategy(sid, params)
+
+        sig = strategy.generate_signals(df, context=ctx)
+
+        # 统一整理成 Series
+        if isinstance(sig, pd.DataFrame):
+            if "signal" not in sig.columns:
+                raise ValueError(f"策略 {sid} 返回的 DataFrame 中没有 'signal' 列")
+            ser = sig["signal"]
+        elif isinstance(sig, pd.Series):
+            ser = sig
+        else:
+            # 万一返回的是 list / ndarray，强制转成 Series
+            ser = pd.Series(sig, index=df.index)
+
+        ser = ser.reindex(df.index).fillna(0)
+        ser = ser.astype(float)
+        signals.append(ser)
+
+    # 3) 按组合方式合成一个总信号
+    combined_signal = combine_signals(signals, mode=mode)
+
+    # 可选：T+1 生效（避免前视偏差），当前版本先按 T+1 处理
+    combined_signal = combined_signal.shift(1).fillna(0)
+
+    # 4) 构造回测输入 DataFrame：在行情上加一个 signal 列
+    bt_df = df.copy()
+    bt_df["signal"] = combined_signal
+
+    # 5) 调用底层 BacktestEngine
+    engine = BacktestEngine(
+        config=BacktestConfig(
+            initial_cash=initial_cash,
+            fee_rate=fee_rate,
+            slippage=slippage,
+            allow_short=False,
+        )
+    )
+    result = engine.run(bt_df)
+    return result
+
+
+__all__ = [
+    "BacktestEngine",
+    "BacktestConfig",
+    "combine_signals",
+    "run_single_backtest",
+]

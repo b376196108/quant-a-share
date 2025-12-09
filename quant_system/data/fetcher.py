@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as _dt
 from datetime import date, timedelta
 from typing import Iterable, List, Optional
+import traceback
 
 import baostock as bs
 import pandas as pd
@@ -77,6 +78,25 @@ def _validate_dates(start_date: str, end_date: str) -> bool:
     return True
 
 
+def _coerce_numeric(series, col_name: str, context: str) -> pd.Series:
+    """
+    Convert a Series-like object to numeric, handling duplicated columns gracefully.
+    """
+    try:
+        return pd.to_numeric(series, errors="coerce")
+    except TypeError:
+        if isinstance(series, pd.DataFrame):
+            print(
+                f"[warn] {context}: column '{col_name}' duplicated; using the first occurrence for numeric conversion"
+            )
+            return pd.to_numeric(series.iloc[:, 0], errors="coerce")
+
+        print(
+            f"[warn] {context}: failed to convert column '{col_name}' (type={type(series)}) to numeric; treating as NaN"
+        )
+        return pd.to_numeric(pd.Series(series), errors="coerce")
+
+
 def _format_history_df(df: pd.DataFrame) -> pd.DataFrame:
     """Convert raw result strings to typed DataFrame with date index."""
     if df.empty:
@@ -86,7 +106,7 @@ def _format_history_df(df: pd.DataFrame) -> pd.DataFrame:
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
     numeric_cols = [c for c in df.columns if c not in {"date", "code"}]
     for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = _coerce_numeric(df[col], col, "format_history_df")
 
     df = df.dropna(subset=["date"])
     df = df.sort_values("date").set_index("date")
@@ -265,14 +285,23 @@ def _history_rows_to_df(rows: List[List[str]], fields: List[str]) -> pd.DataFram
     同时适用于个股和指数（区别由 upsert_* 决定）。
     """
     df = pd.DataFrame(rows, columns=fields)
+    # 去重字段，避免 pctChg -> pct_chg 后出现重复列导致行值变成 Series
+    df = df.loc[:, ~df.columns.duplicated()].copy()
+
     if "date" in df.columns:
         df["trade_date"] = pd.to_datetime(df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+
+    # 先统一字段名
+    if "pctChg" in df.columns:
+        df = df.rename(columns={"pctChg": "pct_chg"})
+
     numeric_cols = [c for c in df.columns if c not in {"date", "trade_date", "code"}]
     for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    if "pctChg" in df.columns:
-        df["pct_chg"] = df["pctChg"]
-    df = df.rename(columns={"pctChg": "pct_chg"})
+        df[col] = _coerce_numeric(df[col], col, "_history_rows_to_df")
+
+    # 确保 pct_chg 列存在
+    if "pct_chg" not in df.columns:
+        df["pct_chg"] = None
     keep_cols = [
         "code",
         "trade_date",
@@ -338,6 +367,9 @@ def fetch_all_stock_daily(
     print(f"[股票] 准备下载区间：{start_date} ~ {end_date}")
 
     start_ts = _time.time()
+    success_cnt = 0
+    empty_codes: List[str] = []
+    failed_codes: List[str] = []
 
     for idx, code in enumerate(codes, start=1):
         try:
@@ -350,7 +382,8 @@ def fetch_all_stock_daily(
                 adjustflag="2",
             )
             if rs.error_code != "0":
-                print(f"\n[股票] 拉取 {code} 失败：BaoStock 错误 {rs.error_code} {rs.error_msg}")
+                print(f"\n[\u80a1\u7968] \u62c9\u53d6 {code} \u5931\u8d25\uff1aBaoStock \u9519\u8bef {rs.error_code} {rs.error_msg}")
+                failed_codes.append(code)
                 continue
 
             rows: List[List[str]] = []
@@ -358,20 +391,27 @@ def fetch_all_stock_daily(
                 rows.append(rs.get_row_data())
 
             if not rows:
+                empty_codes.append(code)
                 continue
 
             df = _history_rows_to_df(rows, fields)
             upsert_stock_daily(df)
+            success_cnt += 1
         except Exception as exc:  # noqa: BLE001
-            print(f"\n[股票] 拉取 {code} 异常：{exc}")
+            print(f"\n[\u80a1\u7968] \u62c9\u53d6 {code} \u5f02\u5e38\uff1a{exc}")
+            traceback.print_exc()
+            failed_codes.append(code)
             continue
 
-        # 每只股票更新一次进度条
-        _print_progress("股票日线更新进度", idx, total, start_ts)
+        # \u6bcf\u53ea\u80a1\u7968\u66f4\u65b0\u4e00\u6b21\u8fdb\u5ea6\u6761
+        _print_progress("\u80a1\u7968\u65e5\u7ebf\u66f4\u65b0\u8fdb\u5ea6", idx, total, start_ts)
 
-    print(f"[完成] 股票日线更新完成：共 {total} 只股票，区间 {start_date} ~ {end_date}。")
-
-
+    elapsed = _time.time() - start_ts
+    print(
+        f"[\u5b8c\u6210] \u80a1\u7968\u65e5\u7ebf\u66f4\u65b0\u5b8c\u6210\uff1a\u6210\u529f {success_cnt}/{total}\uff0c\u65e0\u6570\u636e {len(empty_codes)}\uff0c\u5931\u8d25 {len(failed_codes)}\uff0c\u533a\u95f4 {start_date} ~ {end_date}\uff0c\u8017\u65f6 {_format_seconds(elapsed)}"
+    )
+    if failed_codes:
+        print(f"[\u5931\u8d25\u793a\u4f8b] {', '.join(failed_codes[:10])}")
 
 
 def fetch_index_daily(
@@ -394,6 +434,9 @@ def fetch_index_daily(
     total = len(idx_codes)
     print(f"[指数] 需要更新 {total} 个指数，区间：{start_date} ~ {end_date}")
     start_ts = _time.time()
+    success_cnt = 0
+    empty_codes: List[str] = []
+    failed_codes: List[str] = []
 
     for i, code in enumerate(idx_codes, start=1):
         try:
@@ -406,7 +449,8 @@ def fetch_index_daily(
                 adjustflag="2",
             )
             if rs.error_code != "0":
-                print(f"\n[指数] 拉取 {code} 失败：BaoStock 错误 {rs.error_code} {rs.error_msg}")
+                print(f"\n[\u6307\u6570] \u62c9\u53d6 {code} \u5931\u8d25\uff1aBaoStock \u9519\u8bef {rs.error_code} {rs.error_msg}")
+                failed_codes.append(code)
                 continue
 
             rows: List[List[str]] = []
@@ -414,17 +458,28 @@ def fetch_index_daily(
                 rows.append(rs.get_row_data())
 
             if not rows:
+                empty_codes.append(code)
                 continue
 
             df = _history_rows_to_df(rows, fields)
             upsert_index_daily(df)
+            success_cnt += 1
         except Exception as exc:  # noqa: BLE001
-            print(f"\n[指数] 拉取 {code} 异常：{exc}")
+            print(f"\n[\u6307\u6570] \u62c9\u53d6 {code} \u5f02\u5e38\uff1a{exc}")
+            traceback.print_exc()
+            failed_codes.append(code)
             continue
 
-        _print_progress("指数日线更新进度", i, total, start_ts)
+        _print_progress("\u6307\u6570\u65e5\u7ebf\u66f4\u65b0\u8fdb\u5ea6", i, total, start_ts)
 
-    print(f"[完成] 指数日线更新完成：共 {total} 个指数，区间 {start_date} ~ {end_date}。")
+    elapsed = _time.time() - start_ts
+    print(
+        f"[\u5b8c\u6210] \u6307\u6570\u65e5\u7ebf\u66f4\u65b0\u5b8c\u6210\uff1a\u6210\u529f {success_cnt}/{total}\uff0c\u65e0\u6570\u636e {len(empty_codes)}\uff0c\u5931\u8d25 {len(failed_codes)}\uff0c\u533a\u95f4 {start_date} ~ {end_date}\uff0c\u8017\u65f6 {_format_seconds(elapsed)}"
+    )
+    if failed_codes:
+        print(f"[\u5931\u8d25\u793a\u4f8b] {', '.join(failed_codes[:10])}")
+
+
 
 
 
