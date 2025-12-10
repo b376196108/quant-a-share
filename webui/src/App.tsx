@@ -10,6 +10,10 @@ import StrategySettingsPage from './components/StrategySettingsPage';
 import NewsPage from './components/NewsPage';
 import type { StockData, Position, Strategy, IndustryData, MarketStatsData } from './types';
 
+const API_BASE =
+  (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ||
+  'http://localhost:8000';
+
 // ---------------------- 工具函数：后端字段兼容处理 ----------------------
 
 /**
@@ -91,17 +95,17 @@ const mapIndustryList = (
 
   const mapSentimentLabel = (label: unknown, change: number): 'High' | 'Medium' | 'Low' => {
     if (typeof label === 'string') {
-      if (label.includes('高') || label.includes('热')) return 'High';
-      if (label.includes('冰') || label.includes('低')) return 'Low';
+      if (label.includes('高潮') || label.includes('高涨') || label.includes('高')) return 'High';
+      if (label.includes('冰点') || label.includes('低迷') || label.includes('低')) return 'Low';
+      if (label.includes('普通') || label.includes('中')) return 'Medium';
     }
-    // 没有明确情绪标签时，用涨幅粗略判断
     if (change >= 1) return 'High';
     if (change <= -1) return 'Low';
     return 'Medium';
   };
 
   try {
-    return list.map((item) => {
+    const mapped = list.map((item) => {
       const name =
         item['行业'] ??
         item['行业名称'] ??
@@ -131,8 +135,15 @@ const mapIndustryList = (
         sentiment,
       } as IndustryData;
     });
+
+    const sentimentWeight = { High: 2, Medium: 1, Low: 0 } as const;
+    return mapped.sort((a, b) => {
+      const sa = sentimentWeight[a.sentiment] ?? 0;
+      const sb = sentimentWeight[b.sentiment] ?? 0;
+      if (sa !== sb) return sb - sa;
+      return (b.change || 0) - (a.change || 0);
+    });
   } catch {
-    // 出现任何意外，退回到默认 mock
     return fallback;
   }
 };
@@ -290,7 +301,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchIndexKline = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/index-kline?symbol=sh.000001&limit=90');
+        const res = await fetch(`${API_BASE}/api/index-kline?symbol=sh.000001&limit=90`);
 
         if (!res.ok) {
           console.warn('index-kline 接口返回非 200：', res.status);
@@ -325,8 +336,8 @@ const App: React.FC = () => {
     const fetchStats = async () => {
       try {
         const [overviewRes, industryRes] = await Promise.all([
-          fetch('http://localhost:8000/api/overview'),
-          fetch('http://localhost:8000/api/industry-sentiment?limit=5'),
+          fetch(`${API_BASE}/api/overview`),
+          fetch(`${API_BASE}/api/industry-sentiment?limit=5`),
         ]);
 
         if (overviewRes.ok) {

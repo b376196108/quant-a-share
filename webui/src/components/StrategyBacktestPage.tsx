@@ -97,9 +97,27 @@ interface StockOption {
   name: string;
 }
 
+const formatDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDefaultDateRange = () => {
+  const end = new Date();
+  const start = new Date(end);
+  start.setFullYear(end.getFullYear() - 1);
+  return {
+    start: formatDate(start),
+    end: formatDate(end),
+  };
+};
+
 // --- Mock Constants ---
 
 const STOCK_OPTIONS: StockOption[] = [
+  { code: '688192', name: '迪哲医药' },
   { code: '600519', name: '贵州茅台' },
   { code: '300750', name: '宁德时代' },
   { code: '600036', name: '招商银行' },
@@ -452,15 +470,18 @@ const StrategyBacktestPage: React.FC = () => {
     useState<CombinationMode>('OR');
   const [votingThreshold, setVotingThreshold] = useState<number>(2);
 
-  const [params, setParams] = useState<BacktestParams>({
-    symbol: '600519',
-    initialCapital: 100000,
-    startDate: '2015-01-01',
-    endDate: new Date().toISOString().split('T')[0],
-    feeRate: 2.5,
-    slippage: 0.01,
-    tradeSizeMode: 'FixedShares',
-    tradeSizeValue: 100,
+  const [params, setParams] = useState<BacktestParams>(() => {
+    const { start, end } = getDefaultDateRange();
+    return {
+      symbol: '688192',
+      initialCapital: 100000,
+      startDate: start,
+      endDate: end,
+      feeRate: 0,
+      slippage: 0,
+      tradeSizeMode: 'FixedShares',
+      tradeSizeValue: 100,
+    };
   });
 
   const [isRunning, setIsRunning] = useState(false);

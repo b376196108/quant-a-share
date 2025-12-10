@@ -1,0 +1,8 @@
+﻿# backend 独立依赖（如已在根目录 requirements.txt 中安装，可以视情况合并）
+torch
+lightning
+pytorch-forecasting
+polars
+duckdb
+fastapi
+uvicorn

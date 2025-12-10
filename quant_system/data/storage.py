@@ -63,76 +63,104 @@ def save_to_cache(cache_key: str, df: pd.DataFrame) -> None:
 # -----------------------------------------------------------------------------
 
 
-def get_db_connection() -> sqlite3.Connection:
-    """Return SQLite connection; ensure directory exists."""
+def get_db_connection(timeout: float = 30.0) -> sqlite3.Connection:
+    """
+    Return SQLite connection with sensible defaults for concurrent read/write.
+
+    - timeout/busy_timeout: give writers time to wait for short-lived readers
+    - WAL mode: allow reads while writing (needed when API is serving requests)
+    - synchronous=NORMAL: balance durability and write speed for cache usage
+    """
     _ensure_cache_dir()
-    conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
+    conn = sqlite3.connect(
+        DB_PATH,
+        detect_types=sqlite3.PARSE_DECLTYPES,
+        timeout=timeout,
+    )
     conn.row_factory = sqlite3.Row
+    # Improve concurrent access characteristics
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute(f"PRAGMA busy_timeout = {int(timeout * 1000)};")
+    conn.execute("PRAGMA synchronous = NORMAL;")
     return conn
 
 
 def init_db_schema() -> None:
     """Create stock_info, stock_daily, index_daily tables if not exist."""
     conn = get_db_connection()
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS stock_info (
-            code TEXT PRIMARY KEY,
-            code_name TEXT,
-            ipo_date TEXT,
-            out_date TEXT,
-            type TEXT,
-            status TEXT
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS stock_info (
+                code TEXT PRIMARY KEY,
+                code_name TEXT,
+                ipo_date TEXT,
+                out_date TEXT,
+                type TEXT,
+                status TEXT
+            )
+            """
         )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS stock_daily (
-            code TEXT NOT NULL,
-            trade_date TEXT NOT NULL,
-            open REAL,
-            high REAL,
-            low REAL,
-            close REAL,
-            preclose REAL,
-            volume REAL,
-            amount REAL,
-            pct_chg REAL,
-            PRIMARY KEY (code, trade_date)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS stock_daily (
+                code TEXT NOT NULL,
+                trade_date TEXT NOT NULL,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                preclose REAL,
+                volume REAL,
+                amount REAL,
+                pct_chg REAL,
+                PRIMARY KEY (code, trade_date)
+            )
+            """
         )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS index_daily (
-            code TEXT NOT NULL,
-            trade_date TEXT NOT NULL,
-            open REAL,
-            high REAL,
-            low REAL,
-            close REAL,
-            preclose REAL,
-            volume REAL,
-            amount REAL,
-            pct_chg REAL,
-            PRIMARY KEY (code, trade_date)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS index_daily (
+                code TEXT NOT NULL,
+                trade_date TEXT NOT NULL,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                preclose REAL,
+                volume REAL,
+                amount REAL,
+                pct_chg REAL,
+                PRIMARY KEY (code, trade_date)
+            )
+            """
         )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS stock_industry (
-            code TEXT PRIMARY KEY,
-            code_name TEXT,
-            industry TEXT,
-            industry_classification TEXT,
-            update_date TEXT
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_stock_daily_trade_date
+            ON stock_daily(trade_date)
+            """
         )
-        """
-    )
-    conn.commit()
-    conn.close()
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_index_daily_trade_date
+            ON index_daily(trade_date)
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS stock_industry (
+                code TEXT PRIMARY KEY,
+                code_name TEXT,
+                industry TEXT,
+                industry_classification TEXT,
+                update_date TEXT
+            )
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _df_to_records(df: pd.DataFrame, columns: List[str]) -> List[tuple]:
@@ -176,15 +204,17 @@ def upsert_stock_info(df: pd.DataFrame) -> None:
     records = _df_to_records(df[columns], columns)
 
     conn = get_db_connection()
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO stock_info (code, code_name, ipo_date, out_date, type, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        records,
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO stock_info (code, code_name, ipo_date, out_date, type, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            records,
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def upsert_stock_industry(df: pd.DataFrame) -> None:
@@ -225,16 +255,22 @@ def upsert_stock_industry(df: pd.DataFrame) -> None:
     records = _df_to_records(df[columns], columns)
 
     conn = get_db_connection()
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO stock_industry (
-            code, code_name, industry, industry_classification, update_date
-        ) VALUES (?, ?, ?, ?, ?)
-        """,
-        records,
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO stock_industry (
+                code, code_name, industry, industry_classification, update_date
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            records,
+        )
+        conn.commit()
+    except sqlite3.OperationalError as exc:
+        if "locked" in str(exc).lower():
+            print("[storage] stock_industry upsert waited but database is still locked; is another process writing?")
+        raise
+    finally:
+        conn.close()
 
 
 def _prepare_daily_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -278,16 +314,18 @@ def upsert_stock_daily(df: pd.DataFrame) -> None:
     records = _df_to_records(df[columns], columns)
 
     conn = get_db_connection()
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO stock_daily (
-            code, trade_date, open, high, low, close, preclose, volume, amount, pct_chg
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        records,
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO stock_daily (
+                code, trade_date, open, high, low, close, preclose, volume, amount, pct_chg
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            records,
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def upsert_index_daily(df: pd.DataFrame) -> None:
@@ -313,16 +351,18 @@ def upsert_index_daily(df: pd.DataFrame) -> None:
     records = _df_to_records(df[columns], columns)
 
     conn = get_db_connection()
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO index_daily (
-            code, trade_date, open, high, low, close, preclose, volume, amount, pct_chg
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        records,
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO index_daily (
+                code, trade_date, open, high, low, close, preclose, volume, amount, pct_chg
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            records,
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _load_daily(
@@ -343,9 +383,11 @@ def _load_daily(
     """
     params: List[str] = [*codes, start_date, end_date]
     conn = get_db_connection()
-    cur = conn.execute(sql, params)
-    rows = cur.fetchall()
-    conn.close()
+    try:
+        cur = conn.execute(sql, params)
+        rows = cur.fetchall()
+    finally:
+        conn.close()
     if not rows:
         return pd.DataFrame()
 
@@ -385,29 +427,25 @@ def load_stock_daily_with_industry(trade_date: str) -> pd.DataFrame:
             - update_date
     """
     conn = get_db_connection()
+    # 只选取行业情绪计算需要的字段，减少 IO
     query = """
     SELECT
         d.code,
         d.trade_date,
-        d.open,
-        d.high,
-        d.low,
         d.close,
         d.preclose,
-        d.volume,
         d.amount,
-        i.code_name,
-        i.industry,
-        i.industry_classification,
-        i.update_date
+        i.industry
     FROM stock_daily AS d
     LEFT JOIN stock_industry AS i
         ON d.code = i.code
     WHERE d.trade_date = ?
     ORDER BY d.code
     """
-    df = pd.read_sql_query(query, conn, params=(trade_date,))
-    conn.close()
+    try:
+        df = pd.read_sql_query(query, conn, params=(trade_date,))
+    finally:
+        conn.close()
     return df
 
 
@@ -431,7 +469,9 @@ def get_latest_trade_date(table: str = "stock_daily") -> Optional[str]:
     若表为空则返回 None。
     """
     conn = get_db_connection()
-    cur = conn.execute(f"SELECT MAX(trade_date) FROM {table}")
-    row = cur.fetchone()
-    conn.close()
+    try:
+        cur = conn.execute(f"SELECT MAX(trade_date) FROM {table}")
+        row = cur.fetchone()
+    finally:
+        conn.close()
     return row[0] if row and row[0] else None

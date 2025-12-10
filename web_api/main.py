@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 from typing import Any, Dict, List
+import math
+import os
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
@@ -17,15 +19,32 @@ from quant_system.backtest.engine import run_single_backtest
 
 app = FastAPI(title="Quant A-Share API")
 
-# 允许前端 http://localhost:5173 调用
-origins = [
-    "http://localhost:5173",
-]
+def _load_cors_origins() -> list[str]:
+    """
+    Load allowed origins from env `CORS_ALLOW_ORIGINS` (comma separated).
+    Falls back to common local hosts used by Vite preview/dev builds.
+    """
+    raw = os.getenv("CORS_ALLOW_ORIGINS")
+    if raw:
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+        "http://webui:5173",
+        "http://webui",
+    ]
+
+
+origins = _load_cors_origins()
+# Wildcard origins cannot be combined with credentials in CORS responses.
+allow_credentials = "*" not in origins
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -91,6 +110,28 @@ def normalize_symbol(code: str) -> str:
     return code
 
 
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """
+    Convert a value to float; if it is NaN/Inf or invalid, return a safe default
+    so the JSON response stays serializable.
+    """
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(f) or math.isinf(f):
+        return default
+    return f
+
+
+def _safe_int(val: Any, default: int = 0) -> int:
+    """Convert value to int with fallback for invalid inputs."""
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
 # ====================== 策略相关 API ======================
 
 @app.get("/api/backtest/strategies", response_model=List[StrategyMetaOut])
@@ -150,11 +191,11 @@ async def run_backtest(req: BacktestRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
     # 绩效指标（确保都是 Python float，便于 JSON 序列化）
-    stats = {k: float(v) for k, v in result.stats.items()}
+    stats = {k: _safe_float(v) for k, v in result.stats.items()}
 
     # 净值曲线：转换成 list[{date, equity}]，方便前端画图
     equity_curve = [
-        {"date": idx.strftime("%Y-%m-%d"), "equity": float(val)}
+        {"date": idx.strftime("%Y-%m-%d"), "equity": _safe_float(val)}
         for idx, val in result.equity_curve.items()
     ]
 
@@ -168,11 +209,11 @@ async def run_backtest(req: BacktestRequest):
         price_series = [
             {
                 "date": pd.to_datetime(row["date"]).strftime("%Y-%m-%d"),
-                "open": float(row.get("open", 0) or 0),
-                "high": float(row.get("high", 0) or 0),
-                "low": float(row.get("low", 0) or 0),
-                "close": float(row.get("close", 0) or 0),
-                "volume": float(row.get("volume", 0) or 0),
+                "open": _safe_float(row.get("open", 0)),
+                "high": _safe_float(row.get("high", 0)),
+                "low": _safe_float(row.get("low", 0)),
+                "close": _safe_float(row.get("close", 0)),
+                "volume": _safe_float(row.get("volume", 0)),
             }
             for _, row in price_df.iterrows()
         ]
@@ -186,11 +227,11 @@ async def run_backtest(req: BacktestRequest):
                 {
                     "date": dt.strftime("%Y-%m-%d") if isinstance(dt, pd.Timestamp) else None,
                     "action": row.get("action"),
-                    "price": float(row.get("price", 0) or 0),
-                    "shares": int(row.get("shares", 0) or 0),
-                    "fee": float(row.get("fee", 0) or 0),
-                    "cash_after": float(row.get("cash_after", 0) or 0),
-                    "position_after": int(row.get("position_after", 0) or 0),
+                    "price": _safe_float(row.get("price", 0)),
+                    "shares": _safe_int(row.get("shares", 0)),
+                    "fee": _safe_float(row.get("fee", 0)),
+                    "cash_after": _safe_float(row.get("cash_after", 0)),
+                    "position_after": _safe_int(row.get("position_after", 0)),
                 }
             )
 
@@ -203,14 +244,14 @@ async def run_backtest(req: BacktestRequest):
     for t in trades:
         action = (t.get("action") or "").lower()
         if action == "buy":
-            last_buy_price = t.get("price") or 0.0
-            last_buy_shares = int(t.get("shares") or 0)
-            last_buy_fee = float(t.get("fee") or 0.0)
+            last_buy_price = _safe_float(t.get("price"))
+            last_buy_shares = _safe_int(t.get("shares"))
+            last_buy_fee = _safe_float(t.get("fee"))
         elif action == "sell" and last_buy_price is not None and last_buy_shares > 0:
-            sell_fee = float(t.get("fee") or 0.0)
-            sell_price = float(t.get("price") or 0.0)
-            profit = (sell_price - float(last_buy_price)) * last_buy_shares - (
-                float(last_buy_fee) + sell_fee
+            sell_fee = _safe_float(t.get("fee"))
+            sell_price = _safe_float(t.get("price"))
+            profit = (sell_price - _safe_float(last_buy_price)) * last_buy_shares - (
+                _safe_float(last_buy_fee) + sell_fee
             )
             if profit >= 0:
                 win_count += 1
@@ -273,10 +314,16 @@ def get_industry_sentiment(
     if df is None or df.empty:
         return []
 
-    # 你可以按需要换排序字段，比如按“情绪”排序
-    df_sorted = df.sort_values("平均涨幅(%)", ascending=False)
+    # 按情绪高->低，再按涨幅降序
+    sentiment_order = {"高潮": 2, "普通": 1, "冰点": 0}
+    df = df.copy()
+    df["情绪排序值"] = df["情绪"].map(sentiment_order).fillna(0).astype(int)
+    df_sorted = df.sort_values(
+        by=["情绪排序值", "平均涨幅(%)"],
+        ascending=[False, False],
+    )
 
-    records = df_sorted.head(limit).to_dict(orient="records")
+    records = df_sorted.head(limit).drop(columns=["情绪排序值"]).to_dict(orient="records")
     return jsonable_encoder(records)
 
 

@@ -12,7 +12,8 @@ Notebook 示例：
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Tuple, Dict
+import time
 
 import numpy as np
 import pandas as pd
@@ -24,6 +25,10 @@ from quant_system.data.storage import (
 
 
 SentimentLabel = Literal["高潮", "普通", "冰点"]
+
+# 简单内存缓存：同一 trade_date + min_stock_count 在 5 分钟内重复调用直接返回，减少 IO
+_CACHE: Dict[Tuple[str, int], Tuple[float, pd.DataFrame]] = {}
+_CACHE_TTL = 300.0  # 秒
 
 
 def _label_industry_sentiment(up_ratio: float, limit_up_ratio: float) -> SentimentLabel:
@@ -80,6 +85,13 @@ def calc_industry_sentiment(
         trade_date = get_latest_trade_date(table="stock_daily")
         if trade_date is None:
             raise RuntimeError("数据库中没有任何 stock_daily 数据，无法计算行业情绪。")
+
+    cache_key = (trade_date, min_stock_count)
+    now = time.time()
+    if cache_key in _CACHE:
+        ts, cached_df = _CACHE[cache_key]
+        if now - ts <= _CACHE_TTL:
+            return cached_df.copy()
 
     df = load_stock_daily_with_industry(trade_date)
     if df.empty:
@@ -150,4 +162,5 @@ def calc_industry_sentiment(
 
     result.drop(columns=["情绪排序值"], inplace=True)
 
+    _CACHE[cache_key] = (now, result)
     return result
