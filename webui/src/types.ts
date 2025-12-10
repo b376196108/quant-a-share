@@ -118,7 +118,10 @@ export interface StockForecastResponse {
   last_date: string;
   last_close: number;
   method: string;
+   signal: string;
+   confidence: number;
   forecast: StockForecastPoint[];
+  history?: StockData[];
 }
 
 export interface NewsItem {

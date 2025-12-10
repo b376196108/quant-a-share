@@ -16,8 +16,10 @@ from quant_system.processing.market_view import calc_market_overview
 from quant_system.strategy.plugins import load_all_plugins
 from quant_system.strategy.registry import list_strategies, StrategyMeta
 from quant_system.backtest.engine import run_single_backtest
+from backend.tft_model.api import router as tft_router
 
 app = FastAPI(title="Quant A-Share API")
+app.include_router(tft_router)
 
 def _load_cors_origins() -> list[str]:
     """

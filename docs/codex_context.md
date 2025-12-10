@@ -57,6 +57,465 @@ Codex 的角色： 充当本量化分析系统的智能编码助手。在开发�
 
 ```text
 quant-a-share/  # 项目根目录
+├── backend/  # 后端模型与数据流水线
+│   ├── __pycache__/  # 后端包缓存
+│   │   └── __init__.cpython-310.pyc  # 包初始化缓存
+│   ├── data_pipeline/  # 特征工程管道
+│   │   ├── __pycache__/  # 数据管道缓存
+│   │   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   │   └── feature_engineering.cpython-310.pyc  # 特征工程缓存
+│   │   ├── __init__.py  # 数据管道包初始化
+│   │   └── feature_engineering.py  # 特征工程处理脚本
+│   ├── tft_model/  # TFT 时间序列模型
+│   │   ├── __pycache__/  # TFT 模块缓存
+│   │   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   │   ├── api.cpython-310.pyc  # API 缓存
+│   │   │   ├── predict.cpython-310.pyc  # 预测脚本缓存
+│   │   │   ├── train.cpython-310.pyc  # 训练脚本缓存
+│   │   │   └── utils.cpython-310.pyc  # 工具函数缓存
+│   │   ├── data/  # 模型特征数据
+│   │   │   ├── features_sh_600519.csv  # 茅台特征CSV
+│   │   │   └── features_sh_600519.parquet  # 茅台特征Parquet
+│   │   ├── models/  # 模型权重
+│   │   │   ├── tft-epoch=02-val_loss=1.0177.ckpt  # 训练检查点
+│   │   │   └── tft-epoch=02-val_loss=1.0203.ckpt  # 训练检查点
+│   │   ├── __init__.py  # 模型包初始化
+│   │   ├── api.py  # 模型服务接口
+│   │   ├── predict.py  # 推理脚本
+│   │   ├── train.py  # 训练脚本
+│   │   └── utils.py  # 模型工具函数
+│   ├── __init__.py  # 后端包初始化
+│   ├── README.md  # 后端说明文档
+│   └── requirements.txt  # 后端依赖清单
+├── config/  # 全局配置
+│   └── settings.yaml  # 系统参数示例
+├── data_cache/  # 行情数据缓存
+│   ├── index_sh-000001_2024-12-08_2025-12-08_d.csv  # 上证指数日线缓存
+│   ├── index_sh-000001_2024-12-09_2025-12-09_d.csv  # 上证指数日线缓存
+│   ├── market_data.sqlite  # 行情SQLite缓存库
+│   ├── stock_sh-600519_2015-01-01_2025-12-09_d.csv  # 贵州茅台日线缓存
+│   ├── stock_sh-600519_2023-01-01_2024-12-31_d.csv  # 贵州茅台日线缓存
+│   ├── stock_sh-600519_2024-01-01_2024-12-31_d.csv  # 贵州茅台日线缓存
+│   ├── stock_sh-600519_2024-01-01_2025-12-07_d.csv  # 贵州茅台日线缓存
+│   ├── stock_sh-600519_2024-01-01_2025-12-09_d.csv  # 贵州茅台日线缓存
+│   ├── stock_sh-688017_2025-01-01_2025-12-09_d.csv  # 绿的谐波日线缓存
+│   ├── stock_sh-688192_2024-01-01_2025-12-09_d.csv  # 迪哲医药日线缓存
+│   ├── stock_sh-688192_2024-12-10_2025-12-10_d.csv  # 迪哲医药日线缓存
+│   ├── stock_sh-688192_2025-01-01_2025-12-09_d.csv  # 迪哲医药日线缓存
+│   └── stock_sz-002460_2025-01-01_2025-12-09_d.csv  # 赣锋锂业日线缓存
+├── docs/  # 项目文档
+│   ├── api_reference.md  # API 参考
+│   └── codex_context.md  # Codex 上下文指南
+├── google-ai-webui/  # Google AI Studio 前端样例
+│   └── .env.local  # 本地环境变量示例
+├── notebooks/  # Notebook 示例
+│   ├── data_cache/  # Notebook 缓存数据
+│   │   └── market_data.sqlite  # Notebook 本地数据库
+│   ├── 01_data_and_market_overview.ipynb  # 数据与市场概览Notebook
+│   └── 测试.ipynb  # 临时测试Notebook
+├── quant_system/  # 量化系统核心代码
+│   ├── __pycache__/  # 包缓存
+│   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   └── __init__.cpython-313.pyc  # 包初始化缓存
+│   ├── backtest/  # 回测引擎
+│   │   ├── __pycache__/  # 回测模块缓存
+│   │   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   │   ├── __init__.cpython-313.pyc  # 包初始化缓存
+│   │   │   ├── engine.cpython-310.pyc  # 引擎缓存
+│   │   │   ├── engine.cpython-313.pyc  # 引擎缓存
+│   │   │   ├── performance.cpython-310.pyc  # 绩效统计缓存
+│   │   │   └── performance.cpython-313.pyc  # 绩效统计缓存
+│   │   ├── __init__.py  # 回测包初始化
+│   │   ├── engine.py  # 回测执行引擎
+│   │   └── performance.py  # 回测绩效指标
+│   ├── data/  # 数据获取与存储
+│   │   ├── __pycache__/  # 数据模块缓存
+│   │   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   │   ├── __init__.cpython-313.pyc  # 包初始化缓存
+│   │   │   ├── fetcher.cpython-310.pyc  # 抓取逻辑缓存
+│   │   │   ├── fetcher.cpython-313.pyc  # 抓取逻辑缓存
+│   │   │   ├── storage.cpython-310.pyc  # 存储逻辑缓存
+│   │   │   └── storage.cpython-313.pyc  # 存储逻辑缓存
+│   │   ├── __init__.py  # 数据包初始化
+│   │   ├── fetcher.py  # 数据抓取封装
+│   │   └── storage.py  # 本地存储封装
+│   ├── indicators/  # 技术指标引擎
+│   │   ├── __pycache__/  # 指标模块缓存
+│   │   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   │   ├── __init__.cpython-313.pyc  # 包初始化缓存
+│   │   │   ├── base_indicator.cpython-310.pyc  # 指标基类缓存
+│   │   │   ├── base_indicator.cpython-313.pyc  # 指标基类缓存
+│   │   │   ├── engine.cpython-310.pyc  # 指标引擎缓存
+│   │   │   └── engine.cpython-313.pyc  # 指标引擎缓存
+│   │   ├── plugins/  # 指标插件
+│   │   │   ├── __pycache__/  # 插件缓存
+│   │   │   │   ├── __init__.cpython-310.pyc  # 插件初始化缓存
+│   │   │   │   ├── __init__.cpython-313.pyc  # 插件初始化缓存
+│   │   │   │   ├── macd.cpython-310.pyc  # MACD 缓存
+│   │   │   │   ├── macd.cpython-313.pyc  # MACD 缓存
+│   │   │   │   ├── moving_average.cpython-310.pyc  # 均线缓存
+│   │   │   │   ├── moving_average.cpython-313.pyc  # 均线缓存
+│   │   │   │   ├── rsi.cpython-310.pyc  # RSI 缓存
+│   │   │   │   ├── rsi.cpython-313.pyc  # RSI 缓存
+│   │   │   │   ├── ultimate_features.cpython-310.pyc  # 复合特征缓存
+│   │   │   │   └── ultimate_features.cpython-313.pyc  # 复合特征缓存
+│   │   │   ├── __init__.py  # 指标插件注册
+│   │   │   ├── macd.py  # MACD 指标
+│   │   │   ├── moving_average.py  # 均线指标
+│   │   │   ├── rsi.py  # RSI 指标
+│   │   │   └── ultimate_features.py  # 复合特征指标
+│   │   ├── __init__.py  # 指标包初始化
+│   │   ├── base_indicator.py  # 指标基类定义
+│   │   └── engine.py  # 指标引擎调度
+│   ├── processing/  # 数据清洗与市场视图
+│   │   ├── __pycache__/  # 处理模块缓存
+│   │   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   │   ├── __init__.cpython-313.pyc  # 包初始化缓存
+│   │   │   ├── cleaner.cpython-310.pyc  # 清洗逻辑缓存
+│   │   │   ├── cleaner.cpython-313.pyc  # 清洗逻辑缓存
+│   │   │   ├── industry_sentiment.cpython-310.pyc  # 行业情绪缓存
+│   │   │   ├── industry_sentiment.cpython-313.pyc  # 行业情绪缓存
+│   │   │   ├── market_view.cpython-310.pyc  # 市场概览缓存
+│   │   │   └── market_view.cpython-313.pyc  # 市场概览缓存
+│   │   ├── __init__.py  # 处理包初始化
+│   │   ├── cleaner.py  # 数据清洗脚本
+│   │   ├── industry_sentiment.py  # 行业情绪计算
+│   │   └── market_view.py  # 市场概览计算
+│   ├── strategy/  # 策略与插件
+│   │   ├── __pycache__/  # 策略模块缓存
+│   │   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   │   ├── __init__.cpython-313.pyc  # 包初始化缓存
+│   │   │   ├── base_strategy.cpython-310.pyc  # 策略基类缓存
+│   │   │   ├── base_strategy.cpython-313.pyc  # 策略基类缓存
+│   │   │   ├── registry.cpython-310.pyc  # 策略注册缓存
+│   │   │   └── registry.cpython-313.pyc  # 策略注册缓存
+│   │   ├── plugins/  # 策略插件
+│   │   │   ├── __pycache__/  # 插件缓存
+│   │   │   │   ├── __init__.cpython-310.pyc  # 插件初始化缓存
+│   │   │   │   ├── __init__.cpython-313.pyc  # 插件初始化缓存
+│   │   │   │   ├── connors_rsi2.cpython-310.pyc  # CRS 2 缓存
+│   │   │   │   ├── connors_rsi2.cpython-313.pyc  # CRS 2 缓存
+│   │   │   │   ├── ma_rsi_long_only.cpython-310.pyc  # MA+RSI 缓存
+│   │   │   │   ├── ma_rsi_long_only.cpython-313.pyc  # MA+RSI 缓存
+│   │   │   ├── __init__.py  # 策略插件注册
+│   │   │   ├── connors_rsi2.py  # ConnorsRSI2 策略
+│   │   │   └── ma_rsi_long_only.py  # MA+RSI 多头策略
+│   │   ├── __init__.py  # 策略包初始化
+│   │   ├── base_strategy.py  # 策略基类
+│   │   └── registry.py  # 策略注册表
+│   ├── visualization/  # 可视化组件
+│   │   ├── __pycache__/  # 可视化缓存
+│   │   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   │   ├── __init__.cpython-313.pyc  # 包初始化缓存
+│   │   │   ├── plotting.cpython-310.pyc  # 绘图缓存
+│   │   │   └── plotting.cpython-313.pyc  # 绘图缓存
+│   │   ├── __init__.py  # 可视化包初始化
+│   │   └── plotting.py  # 绘图函数占位
+│   └── __init__.py  # 量化系统包初始化
+├── scripts/  # 辅助脚本
+│   ├── calc_industry_sentiment.py  # 行业情绪计算脚本
+│   ├── download_all_daily_since_2015.py  # 全量日线下载脚本
+│   ├── generate_api_docs.py  # 自动生成API文档
+│   ├── run_backtest_demo.py  # 回测演示脚本
+│   ├── test_indicators_basic.py  # 指标基础测试
+│   ├── test_prepare_tft.py  # TFT数据准备测试
+│   ├── update_codex_directory_structure.py  # Codex目录更新脚本
+│   ├── update_daily_data.py  # 每日数据更新脚本
+│   ├── update_directory_structure.py  # 目录结构生成脚本
+│   └── update_industry_mapping.py  # 行业映射更新脚本
+├── tests/  # 单元测试占位
+│   └── __init__.py  # 测试包初始化
+├── web_api/  # Python 后端接口
+│   ├── __pycache__/  # Web API 缓存
+│   │   ├── __init__.cpython-310.pyc  # 包初始化缓存
+│   │   ├── __init__.cpython-313.pyc  # 包初始化缓存
+│   │   ├── main.cpython-310.pyc  # 主入口缓存
+│   │   └── main.cpython-313.pyc  # 主入口缓存
+│   ├── __init__.py  # Web API 包初始化
+│   ├── main.py  # Web API 入口
+│   └── web_api.md  # Web API 文档
+├── webui/  # 前端 React 项目
+│   ├── node_modules/  # 前端依赖目录（未展开）
+│   ├── public/  # 静态资源
+│   │   └── vite.svg  # Vite 标识
+│   ├── src/  # 前端源代码
+│   │   ├── api/  # 前端API封装
+│   │   │   └── backtest.ts  # 回测接口封装
+│   │   ├── assets/  # 静态素材
+│   │   │   └── react.svg  # React 标志
+│   │   ├── components/  # 页面组件
+│   │   │   ├── AIAnalyst.tsx  # AI 分析组件
+│   │   │   ├── BacktestPanel.tsx  # 回测面板
+│   │   │   ├── HoldingsTable.tsx  # 持仓表格
+│   │   │   ├── IndustrySentimentTable.tsx  # 行业情绪表
+│   │   │   ├── MarketChart.tsx  # 市场走势图
+│   │   │   ├── MarketOverviewCard.tsx  # 市场概览卡片
+│   │   │   ├── MarketStats.tsx  # 市场统计卡片
+│   │   │   ├── NewsPage.tsx  # 新闻页面
+│   │   │   ├── StockForecastPage.tsx  # 个股预测页
+│   │   │   ├── StrategyBacktestPage.tsx  # 策略回测页
+│   │   │   ├── StrategyPanel.tsx  # 策略设置面板
+│   │   │   └── StrategySettingsPage.tsx  # 策略参数页
+│   │   ├── services/  # 前端服务封装
+│   │   │   └── geminiService.ts  # Gemini API 客户端
+│   │   ├── App.css  # 应用样式
+│   │   ├── App.tsx  # 应用入口组件
+│   │   ├── index.css  # 全局样式
+│   │   ├── main.tsx  # 前端入口
+│   │   └── types.ts  # 类型定义
+│   ├── .gitignore  # 前端忽略配置
+│   ├── eslint.config.js  # ESLint 配置
+│   ├── index.html  # 前端HTML模板
+│   ├── package-lock.json  # 前端锁定依赖
+│   ├── package.json  # 前端依赖声明
+│   ├── postcss.config.js  # PostCSS 配置
+│   ├── README.md  # 前端说明
+│   ├── tailwind.config.js  # Tailwind 配置
+│   ├── tsconfig.app.json  # TS 编译配置（应用）
+│   ├── tsconfig.json  # TS 基础配置
+│   ├── tsconfig.node.json  # TS Node 配置
+│   └── vite.config.ts  # Vite 配置
+├── .gitignore  # Git 忽略配置
+├── env_before_fix.txt  # 环境修复前记录
+├── git提交覆盖方法.txt  # Git 覆盖提交说明
+├── requirements.txt  # 项目依赖占位
+└── 每日运行脚本.txt  # 每日任务说明
+
+```
+
+<!-- CODEX_UPDATE_DIRECTORY_STRUCTURE -->
+
+```text
+quant-a-share/  # ?????
+??? backend/  # ??????????
+?   ??? __pycache__/  # ?????
+?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ??? data_pipeline/  # ??????
+?   ?   ??? __pycache__/  # ??????
+?   ?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ?   ??? feature_engineering.cpython-310.pyc  # ??????
+?   ?   ??? __init__.py  # ????????
+?   ?   ??? feature_engineering.py  # ????????
+?   ??? tft_model/  # TFT ??????
+?   ?   ??? __pycache__/  # TFT ????
+?   ?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ?   ??? api.cpython-310.pyc  # API ??
+?   ?   ?   ??? predict.cpython-310.pyc  # ??????
+?   ?   ?   ??? train.cpython-310.pyc  # ??????
+?   ?   ?   ??? utils.cpython-310.pyc  # ??????
+?   ?   ??? data/  # ??????
+?   ?   ?   ??? features_sh_600519.csv  # ????CSV
+?   ?   ?   ??? features_sh_600519.parquet  # ????Parquet
+?   ?   ??? models/  # ????
+?   ?   ?   ??? tft-epoch=02-val_loss=1.0177.ckpt  # ?????
+?   ?   ?   ??? tft-epoch=02-val_loss=1.0203.ckpt  # ?????
+?   ?   ??? __init__.py  # ??????
+?   ?   ??? api.py  # ??????
+?   ?   ??? predict.py  # ????
+?   ?   ??? train.py  # ????
+?   ?   ??? utils.py  # ??????
+?   ??? __init__.py  # ??????
+?   ??? README.md  # ??????
+?   ??? requirements.txt  # ??????
+??? config/  # ????
+?   ??? settings.yaml  # ??????
+??? data_cache/  # ??????
+?   ??? index_sh-000001_2024-12-08_2025-12-08_d.csv  # ????????
+?   ??? index_sh-000001_2024-12-09_2025-12-09_d.csv  # ????????
+?   ??? market_data.sqlite  # ??SQLite???
+?   ??? stock_sh-600519_2015-01-01_2025-12-09_d.csv  # ????????
+?   ??? stock_sh-600519_2023-01-01_2024-12-31_d.csv  # ????????
+?   ??? stock_sh-600519_2024-01-01_2024-12-31_d.csv  # ????????
+?   ??? stock_sh-600519_2024-01-01_2025-12-07_d.csv  # ????????
+?   ??? stock_sh-600519_2024-01-01_2025-12-09_d.csv  # ????????
+?   ??? stock_sh-688017_2025-01-01_2025-12-09_d.csv  # ????????
+?   ??? stock_sh-688192_2024-01-01_2025-12-09_d.csv  # ????????
+?   ??? stock_sh-688192_2024-12-10_2025-12-10_d.csv  # ????????
+?   ??? stock_sh-688192_2025-01-01_2025-12-09_d.csv  # ????????
+?   ??? stock_sz-002460_2025-01-01_2025-12-09_d.csv  # ????????
+??? docs/  # ????
+?   ??? api_reference.md  # API ??
+?   ??? codex_context.md  # Codex ?????
+??? google-ai-webui/  # Google AI Studio ????
+?   ??? .env.local  # ????????
+??? notebooks/  # Notebook ??
+?   ??? data_cache/  # Notebook ????
+?   ?   ??? market_data.sqlite  # Notebook ?????
+?   ??? 01_data_and_market_overview.ipynb  # ???????Notebook
+?   ??? ??.ipynb  # ????Notebook
+??? quant_system/  # ????????
+?   ??? __pycache__/  # ???
+?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ??? __init__.cpython-313.pyc  # ??????
+?   ??? backtest/  # ????
+?   ?   ??? __pycache__/  # ??????
+?   ?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ?   ??? __init__.cpython-313.pyc  # ??????
+?   ?   ?   ??? engine.cpython-310.pyc  # ????
+?   ?   ?   ??? engine.cpython-313.pyc  # ????
+?   ?   ?   ??? performance.cpython-310.pyc  # ??????
+?   ?   ?   ??? performance.cpython-313.pyc  # ??????
+?   ?   ??? __init__.py  # ??????
+?   ?   ??? engine.py  # ??????
+?   ?   ??? performance.py  # ??????
+?   ??? data/  # ???????
+?   ?   ??? __pycache__/  # ??????
+?   ?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ?   ??? __init__.cpython-313.pyc  # ??????
+?   ?   ?   ??? fetcher.cpython-310.pyc  # ??????
+?   ?   ?   ??? fetcher.cpython-313.pyc  # ??????
+?   ?   ?   ??? storage.cpython-310.pyc  # ??????
+?   ?   ?   ??? storage.cpython-313.pyc  # ??????
+?   ?   ??? __init__.py  # ??????
+?   ?   ??? fetcher.py  # ??????
+?   ?   ??? storage.py  # ??????
+?   ??? indicators/  # ??????
+?   ?   ??? __pycache__/  # ??????
+?   ?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ?   ??? __init__.cpython-313.pyc  # ??????
+?   ?   ?   ??? base_indicator.cpython-310.pyc  # ??????
+?   ?   ?   ??? base_indicator.cpython-313.pyc  # ??????
+?   ?   ?   ??? engine.cpython-310.pyc  # ??????
+?   ?   ?   ??? engine.cpython-313.pyc  # ??????
+?   ?   ??? plugins/  # ????
+?   ?   ?   ??? __pycache__/  # ????
+?   ?   ?   ?   ??? __init__.cpython-310.pyc  # ???????
+?   ?   ?   ?   ??? __init__.cpython-313.pyc  # ???????
+?   ?   ?   ?   ??? macd.cpython-310.pyc  # MACD ??
+?   ?   ?   ?   ??? macd.cpython-313.pyc  # MACD ??
+?   ?   ?   ?   ??? moving_average.cpython-310.pyc  # ????
+?   ?   ?   ?   ??? moving_average.cpython-313.pyc  # ????
+?   ?   ?   ?   ??? rsi.cpython-310.pyc  # RSI ??
+?   ?   ?   ?   ??? rsi.cpython-313.pyc  # RSI ??
+?   ?   ?   ?   ??? ultimate_features.cpython-310.pyc  # ??????
+?   ?   ?   ?   ??? ultimate_features.cpython-313.pyc  # ??????
+?   ?   ?   ??? __init__.py  # ??????
+?   ?   ?   ??? macd.py  # MACD ??
+?   ?   ?   ??? moving_average.py  # ????
+?   ?   ?   ??? rsi.py  # RSI ??
+?   ?   ?   ??? ultimate_features.py  # ??????
+?   ?   ??? __init__.py  # ??????
+?   ?   ??? base_indicator.py  # ??????
+?   ?   ??? engine.py  # ??????
+?   ??? processing/  # ?????????
+?   ?   ??? __pycache__/  # ??????
+?   ?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ?   ??? __init__.cpython-313.pyc  # ??????
+?   ?   ?   ??? cleaner.cpython-310.pyc  # ??????
+?   ?   ?   ??? cleaner.cpython-313.pyc  # ??????
+?   ?   ?   ??? industry_sentiment.cpython-310.pyc  # ??????
+?   ?   ?   ??? industry_sentiment.cpython-313.pyc  # ??????
+?   ?   ?   ??? market_view.cpython-310.pyc  # ??????
+?   ?   ?   ??? market_view.cpython-313.pyc  # ??????
+?   ?   ??? __init__.py  # ??????
+?   ?   ??? cleaner.py  # ??????
+?   ?   ??? industry_sentiment.py  # ??????
+?   ?   ??? market_view.py  # ??????
+?   ??? strategy/  # ?????
+?   ?   ??? __pycache__/  # ??????
+?   ?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ?   ??? __init__.cpython-313.pyc  # ??????
+?   ?   ?   ??? base_strategy.cpython-310.pyc  # ??????
+?   ?   ?   ??? base_strategy.cpython-313.pyc  # ??????
+?   ?   ?   ??? registry.cpython-310.pyc  # ??????
+?   ?   ?   ??? registry.cpython-313.pyc  # ??????
+?   ?   ??? plugins/  # ????
+?   ?   ?   ??? __pycache__/  # ????
+?   ?   ?   ?   ??? __init__.cpython-310.pyc  # ???????
+?   ?   ?   ?   ??? __init__.cpython-313.pyc  # ???????
+?   ?   ?   ?   ??? connors_rsi2.cpython-310.pyc  # CRS 2 ??
+?   ?   ?   ?   ??? connors_rsi2.cpython-313.pyc  # CRS 2 ??
+?   ?   ?   ?   ??? ma_rsi_long_only.cpython-310.pyc  # MA+RSI ??
+?   ?   ?   ?   ??? ma_rsi_long_only.cpython-313.pyc  # MA+RSI ??
+?   ?   ?   ??? __init__.py  # ??????
+?   ?   ?   ??? connors_rsi2.py  # ConnorsRSI2 ??
+?   ?   ?   ??? ma_rsi_long_only.py  # MA+RSI ????
+?   ?   ??? __init__.py  # ??????
+?   ?   ??? base_strategy.py  # ????
+?   ?   ??? registry.py  # ?????
+?   ??? visualization/  # ?????
+?   ?   ??? __pycache__/  # ?????
+?   ?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ?   ??? __init__.cpython-313.pyc  # ??????
+?   ?   ?   ??? plotting.cpython-310.pyc  # ????
+?   ?   ?   ??? plotting.cpython-313.pyc  # ????
+?   ?   ??? __init__.py  # ???????
+?   ?   ??? plotting.py  # ??????
+?   ??? __init__.py  # ????????
+??? scripts/  # ????
+?   ??? calc_industry_sentiment.py  # ????????
+?   ??? download_all_daily_since_2015.py  # ????????
+?   ??? generate_api_docs.py  # ????API??
+?   ??? run_backtest_demo.py  # ??????
+?   ??? test_indicators_basic.py  # ??????
+?   ??? test_prepare_tft.py  # TFT??????
+?   ??? update_codex_directory_structure.py  # Codex??????
+?   ??? update_daily_data.py  # ????????
+?   ??? update_directory_structure.py  # ????????
+?   ??? update_industry_mapping.py  # ????????
+??? tests/  # ??????
+?   ??? __init__.py  # ??????
+??? web_api/  # Python ????
+?   ??? __pycache__/  # Web API ??
+?   ?   ??? __init__.cpython-310.pyc  # ??????
+?   ?   ??? __init__.cpython-313.pyc  # ??????
+?   ?   ??? main.cpython-310.pyc  # ?????
+?   ?   ??? main.cpython-313.pyc  # ?????
+?   ??? __init__.py  # Web API ????
+?   ??? main.py  # Web API ??
+?   ??? web_api.md  # Web API ??
+??? webui/  # ?? React ??
+?   ??? node_modules/  # ???????????
+?   ??? public/  # ????
+?   ?   ??? vite.svg  # Vite ??
+?   ??? src/  # ?????
+?   ?   ??? api/  # ??API??
+?   ?   ?   ??? backtest.ts  # ??????
+?   ?   ??? assets/  # ????
+?   ?   ?   ??? react.svg  # React ??
+?   ?   ??? components/  # ????
+?   ?   ?   ??? AIAnalyst.tsx  # AI ????
+?   ?   ?   ??? BacktestPanel.tsx  # ????
+?   ?   ?   ??? HoldingsTable.tsx  # ????
+?   ?   ?   ??? IndustrySentimentTable.tsx  # ?????
+?   ?   ?   ??? MarketChart.tsx  # ?????
+?   ?   ?   ??? MarketOverviewCard.tsx  # ??????
+?   ?   ?   ??? MarketStats.tsx  # ??????
+?   ?   ?   ??? NewsPage.tsx  # ????
+?   ?   ?   ??? StockForecastPage.tsx  # ?????
+?   ?   ?   ??? StrategyBacktestPage.tsx  # ?????
+?   ?   ?   ??? StrategyPanel.tsx  # ??????
+?   ?   ?   ??? StrategySettingsPage.tsx  # ?????
+?   ?   ??? services/  # ??????
+?   ?   ?   ??? geminiService.ts  # Gemini API ???
+?   ?   ??? App.css  # ????
+?   ?   ??? App.tsx  # ??????
+?   ?   ??? index.css  # ????
+?   ?   ??? main.tsx  # ????
+?   ?   ??? types.ts  # ????
+?   ??? .gitignore  # ??????
+?   ??? eslint.config.js  # ESLint ??
+?   ??? index.html  # ??HTML??
+?   ??? package-lock.json  # ??????
+?   ??? package.json  # ??????
+?   ??? postcss.config.js  # PostCSS ??
+?   ??? README.md  # ????
+?   ??? tailwind.config.js  # Tailwind ??
+?   ??? tsconfig.app.json  # TS ????????
+?   ??? tsconfig.json  # TS ????
+?   ??? tsconfig.node.json  # TS Node ??
+?   ??? vite.config.ts  # Vite ??
+??? .gitignore  # Git ????
+??? env_before_fix.txt  # ???????
+??? git??????.txt  # Git ??????
+??? requirements.txt  # ??????
+??? ??????.txt  # ??????
+```
+
+<!-- CODEX_UPDATE_DIRECTORY_STRUCTURE -->
+
+```text
+quant-a-share/  # 项目根目录
 ├── .gitignore  # Git 忽略配置
 ├── config/  # 全局配置
 │   └── settings.yaml  # 系统参数示例

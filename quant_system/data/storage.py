@@ -114,6 +114,13 @@ def init_db_schema() -> None:
                 volume REAL,
                 amount REAL,
                 pct_chg REAL,
+                turn REAL,
+                tradestatus INTEGER,
+                pe_ttm REAL,
+                pb_mrq REAL,
+                ps_ttm REAL,
+                pcf_ncf_ttm REAL,
+                is_st INTEGER,
                 PRIMARY KEY (code, trade_date)
             )
             """
@@ -159,8 +166,33 @@ def init_db_schema() -> None:
             """
         )
         conn.commit()
+        # 在建表后尝试迁移老库，确保新字段齐备
+        migrate_stock_daily_add_new_fields(conn)
     finally:
         conn.close()
+
+
+def migrate_stock_daily_add_new_fields(conn: sqlite3.Connection) -> None:
+    """
+    为 stock_daily 增加新增字段（若已存在则忽略），便于兼容旧库。
+    """
+    cursor = conn.cursor()
+    columns = {
+        "turn": "REAL",
+        "tradestatus": "INTEGER",
+        "pe_ttm": "REAL",
+        "pb_mrq": "REAL",
+        "ps_ttm": "REAL",
+        "pcf_ncf_ttm": "REAL",
+        "is_st": "INTEGER",
+    }
+    for name, col_type in columns.items():
+        try:
+            cursor.execute(f"ALTER TABLE stock_daily ADD COLUMN {name} {col_type}")
+        except Exception:
+            # 已存在时忽略
+            pass
+    conn.commit()
 
 
 def _df_to_records(df: pd.DataFrame, columns: List[str]) -> List[tuple]:
@@ -279,13 +311,19 @@ def _prepare_daily_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.loc[:, ~df.columns.duplicated()]
     if "date" in df.columns:
         df.rename(columns={"date": "trade_date"}, inplace=True)
+    rename_map = {
+        "pctChg": "pct_chg",
+        "peTTM": "pe_ttm",
+        "pbMRQ": "pb_mrq",
+        "psTTM": "ps_ttm",
+        "pcfNcfTTM": "pcf_ncf_ttm",
+        "isST": "is_st",
+    }
+    df.rename(columns=rename_map, inplace=True)
     df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce").dt.strftime("%Y-%m-%d")
     numeric_cols = [c for c in df.columns if c not in {"trade_date", "code"}]
     for col in numeric_cols:
         df[col] = _coerce_numeric(df[col], col, "_prepare_daily_df")
-    # normalize pctChg to pct_chg
-    if "pctChg" in df.columns:
-        df = df.rename(columns={"pctChg": "pct_chg"})
     if "pct_chg" not in df.columns:
         df["pct_chg"] = None
     return df
@@ -307,6 +345,13 @@ def upsert_stock_daily(df: pd.DataFrame) -> None:
         "volume",
         "amount",
         "pct_chg",
+        "turn",
+        "tradestatus",
+        "pe_ttm",
+        "pb_mrq",
+        "ps_ttm",
+        "pcf_ncf_ttm",
+        "is_st",
     ]
     for col in columns:
         if col not in df.columns:
@@ -318,8 +363,9 @@ def upsert_stock_daily(df: pd.DataFrame) -> None:
         conn.executemany(
             """
             INSERT OR REPLACE INTO stock_daily (
-                code, trade_date, open, high, low, close, preclose, volume, amount, pct_chg
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                code, trade_date, open, high, low, close, preclose, volume, amount, pct_chg,
+                turn, tradestatus, pe_ttm, pb_mrq, ps_ttm, pcf_ncf_ttm, is_st
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             records,
         )

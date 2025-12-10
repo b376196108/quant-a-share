@@ -33,6 +33,13 @@ DEFAULT_FIELDS = [
     "amount",
     "preclose",
     "pctChg",
+    "turn",
+    "tradestatus",
+    "peTTM",
+    "pbMRQ",
+    "psTTM",
+    "pcfNcfTTM",
+    "isST",
 ]
 
 # 默认指数列表：上证、深成、创业板、沪深300
@@ -294,6 +301,14 @@ def _history_rows_to_df(rows: List[List[str]], fields: List[str]) -> pd.DataFram
     # 先统一字段名
     if "pctChg" in df.columns:
         df = df.rename(columns={"pctChg": "pct_chg"})
+    rename_map = {
+        "peTTM": "pe_ttm",
+        "pbMRQ": "pb_mrq",
+        "psTTM": "ps_ttm",
+        "pcfNcfTTM": "pcf_ncf_ttm",
+        "isST": "is_st",
+    }
+    df = df.rename(columns=rename_map)
 
     numeric_cols = [c for c in df.columns if c not in {"date", "trade_date", "code"}]
     for col in numeric_cols:
@@ -313,6 +328,13 @@ def _history_rows_to_df(rows: List[List[str]], fields: List[str]) -> pd.DataFram
         "volume",
         "amount",
         "pct_chg",
+        "turn",
+        "tradestatus",
+        "pe_ttm",
+        "pb_mrq",
+        "ps_ttm",
+        "pcf_ncf_ttm",
+        "is_st",
     ]
     for col in keep_cols:
         if col not in df.columns:
@@ -360,7 +382,25 @@ def fetch_all_stock_daily(
         return
 
     codes = stock_info_df["code"].tolist()
-    fields = ["date", "code", "open", "high", "low", "close", "preclose", "volume", "amount", "pctChg"]
+    fields = [
+        "date",
+        "code",
+        "open",
+        "high",
+        "low",
+        "close",
+        "preclose",
+        "volume",
+        "amount",
+        "pctChg",
+        "turn",
+        "tradestatus",
+        "peTTM",
+        "pbMRQ",
+        "psTTM",
+        "pcfNcfTTM",
+        "isST",
+    ]
     total = len(codes)
 
     print(f"[股票] 使用股票列表日期：{list_day_str}，共 {total} 只股票。")
