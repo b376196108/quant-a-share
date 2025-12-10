@@ -39,7 +39,7 @@ python scripts/update_codex_directory_structure.py
    `## 📁 Project Directory Structure <!-- CODEX_UPDATE_DIRECTORY_STRUCTURE -->`  
    这部分的内容（保持标题不变）。
 
-5. 更新后的 codex_context.md 必须保持 Markdown 正常格式，不改变文档其他部分。
+5. 更新后的 codex_context.md 必须保持 Markdown 正常格式，不改变文档其他部分。目录备注要用中文标注
 
 执行步骤：
 - 扫描目录  
