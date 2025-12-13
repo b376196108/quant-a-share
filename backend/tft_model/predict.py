@@ -7,7 +7,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 
-import baostock as bs
+try:
+    import baostock as bs
+except ImportError:  # pragma: no cover
+    bs = None
 import numpy as np
 import pandas as pd
 import torch
@@ -95,6 +98,9 @@ def _fetch_recent_daily(
     当前版本只是作为 baseline 模型的数据来源：
     - 后续如果有本地特征仓库（Parquet/SQLite），只要改这里的实现即可。
     """
+    if bs is None:
+        raise ModuleNotFoundError("缺少依赖 baostock，请先安装：pip install baostock")
+
     if end_date is None:
         end = dt.date.today()
     else:
@@ -320,17 +326,17 @@ def _tft_predict_direction(ts_code: str) -> Optional[Tuple[str, float]]:
 
 
 @lru_cache(maxsize=1)
-def _load_tft_regression_model(training_dataset: TimeSeriesDataSet) -> TemporalFusionTransformer:
+def _load_tft_regression_model() -> TemporalFusionTransformer:
     """
     加载回归版 TFT 模型（预测收盘价分位数）。
-
-    这里依赖传入的 training_dataset 来恢复字段信息。
     """
     if not os.path.exists(REG_CKPT_PATH):
         raise FileNotFoundError(f"回归模型 checkpoint 不存在: {REG_CKPT_PATH}")
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     model = TemporalFusionTransformer.load_from_checkpoint(
         REG_CKPT_PATH,
+        map_location=device,
     )
     model.eval()
     return model
@@ -418,18 +424,31 @@ def tft_price_forecast(
 
     pred_loader = pred_ds.to_dataloader(train=False, batch_size=1, num_workers=0)
 
-    model = _load_tft_regression_model(training_ds)
+    model = _load_tft_regression_model()
 
     quantiles = [0.1, 0.5, 0.9]
     with torch.no_grad():
         preds = model.predict(pred_loader, mode="quantiles", quantiles=quantiles)
 
-    preds = preds.numpy()[0]
+    if isinstance(preds, dict):
+        preds = preds.get("prediction", preds)
+    if isinstance(preds, (list, tuple)):
+        preds = preds[0]
+    if hasattr(preds, "detach"):
+        preds = preds.detach().cpu().numpy()
+    else:
+        preds = np.asarray(preds)
+
+    preds = np.asarray(preds)
+    if preds.ndim == 3:
+        preds = preds[0]
+    elif preds.ndim != 2:
+        raise ValueError(f"unexpected regression prediction shape: {preds.shape}")
 
     last_date = pd.to_datetime(df_recent["trade_date"].max()).date()
+    future_dates = _next_business_days(last_date, horizon)
     results: List[Dict[str, float]] = []
-    for i in range(horizon):
-        d = last_date + pd.Timedelta(days=i + 1)
+    for i, d in enumerate(future_dates):
         p10, p50, p90 = preds[i].tolist()
         results.append(
             {
@@ -523,6 +542,15 @@ def get_recent_history(
     lookback_days: int = 90,
 ) -> List[dict]:
     """获取最近一段时间的历史 K 线数据，便于前端绘图。"""
+    def _safe_float(val: object, default: float = 0.0) -> float:
+        try:
+            f = float(val)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return default
+        if not np.isfinite(f):
+            return default
+        return f
+
     norm_code = normalize_stock_code(ts_code)
     bs_code = _normalize_ts_code(norm_code)
     df = _fetch_recent_daily(bs_code, end_date=end_date, lookback_days=lookback_days)
@@ -536,16 +564,160 @@ def get_recent_history(
         history.append(
             {
                 "time": pd.to_datetime(row["date"]).strftime("%Y-%m-%d"),
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-                "volume": float(row["volume"]),
-                "ma5": float(row["ma5"]),
-                "ma20": float(row["ma20"]),
+                "open": _safe_float(row.get("open")),
+                "high": _safe_float(row.get("high")),
+                "low": _safe_float(row.get("low")),
+                "close": _safe_float(row.get("close")),
+                "volume": _safe_float(row.get("volume")),
+                "ma5": _safe_float(row.get("ma5")),
+                "ma20": _safe_float(row.get("ma20")),
             }
         )
     return history
+
+
+def _next_business_days(start: dt.date, n: int) -> List[dt.date]:
+    """
+    Generate the next n business days after start (Mon-Fri).
+
+    Note: this does not account for China A-share holidays.
+    """
+    if n <= 0:
+        return []
+
+    days: List[dt.date] = []
+    cursor = start
+    while len(days) < n:
+        cursor += dt.timedelta(days=1)
+        if cursor.weekday() < 5:
+            days.append(cursor)
+    return days
+
+
+def baseline_price_forecast(
+    last_date: str,
+    last_close: float,
+    history: List[dict] | None,
+    signal: str,
+    confidence: float,
+    horizon: int = 5,
+) -> List[Dict[str, float]]:
+    """
+    A deterministic baseline forecast for close price path.
+
+    Uses recent return statistics + simple signal tilt to avoid a flat path
+    (especially for neutral signals) when regression TFT is unavailable.
+    """
+    horizon = int(horizon) if horizon is not None else 0
+    horizon = max(horizon, 1)
+
+    try:
+        base_date = dt.datetime.strptime(last_date, "%Y-%m-%d").date()
+    except Exception:
+        base_date = dt.date.today()
+
+    confidence = float(confidence)
+    if not np.isfinite(confidence):
+        confidence = 0.5
+    confidence = float(np.clip(confidence, 0.0, 1.0))
+
+    closes: List[float] = []
+    ma20: float | None = None
+    if history:
+        try:
+            ordered = sorted(history, key=lambda x: x.get("time") or "")
+        except Exception:
+            ordered = list(history)
+        for row in ordered:
+            try:
+                c = float(row.get("close"))
+            except Exception:
+                continue
+            if np.isfinite(c):
+                closes.append(c)
+        if ordered:
+            try:
+                m = float(ordered[-1].get("ma20"))
+                if np.isfinite(m) and m > 0:
+                    ma20 = m
+            except Exception:
+                ma20 = None
+
+    if not closes:
+        closes = [float(last_close)]
+
+    returns: List[float] = []
+    for i in range(1, len(closes)):
+        prev = closes[i - 1]
+        cur = closes[i]
+        if prev and np.isfinite(prev) and np.isfinite(cur):
+            returns.append(cur / prev - 1.0)
+
+    lookback = min(len(returns), 20)
+    recent_returns = returns[-lookback:] if lookback else []
+    mu = float(np.mean(recent_returns)) if recent_returns else 0.0
+    sigma = float(np.std(recent_returns, ddof=1)) if len(recent_returns) > 1 else float(abs(mu))
+    if not np.isfinite(sigma) or sigma <= 0:
+        sigma = 0.012
+
+    # Momentum proxy from the last 5 trading days (if possible)
+    if len(closes) >= 6 and closes[-6] != 0:
+        ret_5d = closes[-1] / closes[-6] - 1.0
+        mom = ret_5d / 5.0
+    else:
+        mom = mu
+
+    if ma20 is None:
+        window = closes[-20:] if len(closes) >= 20 else closes
+        ma20 = float(np.mean(window)) if window else float(last_close)
+
+    reversion = 0.0
+    if last_close and ma20 and np.isfinite(ma20) and ma20 > 0:
+        reversion = (ma20 / float(last_close) - 1.0) / float(horizon)
+
+    signal_tilt = 0.0
+    if signal == "买入":
+        signal_tilt = 0.0025 * (0.5 + confidence)
+    elif signal == "卖出":
+        signal_tilt = -0.0025 * (0.5 + confidence)
+
+    # Trend: blend mean, momentum and mild mean-reversion; neutral keeps market drift.
+    trend = 0.45 * mu + 0.35 * mom + 0.20 * reversion + signal_tilt
+    trend = float(np.clip(trend, -0.03, 0.03))
+
+    # Use recent return pattern as deterministic "wiggle"; lower confidence -> noisier.
+    pattern_len = min(len(recent_returns), max(horizon, 5))
+    pattern = recent_returns[-pattern_len:] if pattern_len else [0.0]
+    noise_weight = 0.25 + (1.0 - confidence) * 0.5
+
+    pred = float(last_close)
+    dates = _next_business_days(base_date, horizon)
+    results: List[Dict[str, float]] = []
+
+    for i, d in enumerate(dates, start=1):
+        base_r = float(pattern[(i - 1) % len(pattern)])
+        step_ret = trend + noise_weight * (base_r - mu)
+        step_ret = float(np.clip(step_ret, -0.05, 0.05))
+
+        pred = float(pred * (1.0 + step_ret))
+
+        band = max(0.01, float(sigma) * float(np.sqrt(i)) * 1.2)
+        band *= 1.0 + (1.0 - confidence) * 1.0
+        band = float(np.clip(band, 0.01, 0.20))
+
+        lower = float(pred * (1.0 - band))
+        upper = float(pred * (1.0 + band))
+
+        results.append(
+            {
+                "date": d.strftime("%Y-%m-%d"),
+                "predicted_close": pred,
+                "lower": lower,
+                "upper": upper,
+            }
+        )
+
+    return results
 
 
 def model_predict(ts_code: str, date: Optional[str] = None) -> Tuple[str, float]:

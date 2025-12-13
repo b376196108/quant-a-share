@@ -1,14 +1,21 @@
 ﻿from __future__ import annotations
 
-import datetime as dt
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .predict import get_latest_price, get_recent_history, model_predict, tft_price_forecast
+from .predict import (
+    baseline_price_forecast,
+    get_latest_price,
+    get_recent_history,
+    model_predict,
+    tft_price_forecast,
+)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class PredictResponse(BaseModel):
@@ -110,30 +117,29 @@ async def forecast(symbol: str, days: int = 5) -> StockForecastResponse:
                     upper=upper,
                 )
             )
-    except Exception:
-        method_desc = f"baseline_5d_return_signal({signal}, conf={confidence:.2f})"
+    except Exception as exc:
+        logger.exception("tft_price_forecast failed: symbol=%s, days=%s", symbol, days)
+        reason = type(exc).__name__
+        method_desc = f"baseline_price_forecast({signal}, conf={confidence:.2f}, reason={reason})"
         forecast_points = []
 
-        base_date = dt.datetime.strptime(last_date, "%Y-%m-%d").date()
-        daily_pct = 0.0
-        if signal == "买入":
-            daily_pct = 0.002 * (0.5 + confidence)
-        elif signal == "卖出":
-            daily_pct = -0.002 * (0.5 + confidence)
-
-        for i in range(1, max(days, 1) + 1):
-            d = base_date + dt.timedelta(days=i)
-            pred = float(last_close * (1 + daily_pct * i))
-            change_pct = pred / last_close - 1.0
-
-            band = 0.02 + (1.0 - confidence) * 0.05
-            lower = float(pred * (1 - band))
-            upper = float(pred * (1 + band))
-
+        base_points = baseline_price_forecast(
+            last_date=last_date,
+            last_close=last_close,
+            history=history,
+            signal=signal,
+            confidence=confidence,
+            horizon=days,
+        )
+        for p in base_points:
+            pred_close = float(p["predicted_close"])
+            change_pct = pred_close / last_close - 1.0
+            lower = float(p.get("lower")) if p.get("lower") is not None else None
+            upper = float(p.get("upper")) if p.get("upper") is not None else None
             forecast_points.append(
                 StockForecastPoint(
-                    date=d.strftime("%Y-%m-%d"),
-                    predicted_close=pred,
+                    date=p["date"],
+                    predicted_close=pred_close,
                     change_pct=change_pct,
                     lower=lower,
                     upper=upper,

@@ -132,4 +132,12 @@ export interface NewsItem {
   time: string;
   sentiment: MarketTrend;
   tags: string[];
+  url?: string;
+}
+
+export interface NewsResponse {
+  source: string;
+  generated_at: string;
+  items: NewsItem[];
+  trending: string[];
 }

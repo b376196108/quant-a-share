@@ -2,7 +2,9 @@
 torch
 lightning
 pytorch-forecasting
+baostock
 polars
 duckdb
 fastapi
+requests
 uvicorn

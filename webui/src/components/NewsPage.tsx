@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { Newspaper, RefreshCw, Zap, ExternalLink, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import type { NewsItem } from '../types';
+import type { NewsItem, NewsResponse } from '../types';
 import { generateDailyBriefing } from '../services/geminiService';
+
+const API_BASE =
+  (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') || '';
 
 // Mock Data for News
 const MOCK_NEWS: NewsItem[] = [
@@ -62,18 +65,39 @@ const MOCK_NEWS: NewsItem[] = [
   }
 ];
 
+const DEFAULT_TRENDING = ['#中特估', '#人工智能', '#半导体复苏', '#美联储加息', '#人民币汇率', '#新能源出海'];
+
 const NewsPage: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [aiBriefing, setAiBriefing] = useState<string | null>(null);
   const [generatingBriefing, setGeneratingBriefing] = useState(false);
+  const [trending, setTrending] = useState<string[]>(DEFAULT_TRENDING);
 
   useEffect(() => {
-    // Simulate API fetch
-    setTimeout(() => {
-      setNews(MOCK_NEWS);
-      setLoading(false);
-    }, 800);
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const resp = await fetch(`${API_BASE}/api/news?limit=30&lookback_hours=24`);
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(text || '服务返回错误');
+        }
+        const json = (await resp.json()) as NewsResponse;
+        setNews(json.items || []);
+        setTrending(json.trending?.length ? json.trending : DEFAULT_TRENDING);
+      } catch (e: any) {
+        console.error(e);
+        setError(e?.message || '获取新闻失败，已回退到示例数据');
+        setNews(MOCK_NEWS);
+        setTrending(DEFAULT_TRENDING);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
   }, []);
 
   const handleGenerateBriefing = async () => {
@@ -100,6 +124,26 @@ const NewsPage: React.FC = () => {
     }
   };
 
+  const handleRefresh = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await fetch(`${API_BASE}/api/news?limit=30&lookback_hours=24`);
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || '服务返回错误');
+      }
+      const json = (await resp.json()) as NewsResponse;
+      setNews(json.items || []);
+      setTrending(json.trending?.length ? json.trending : DEFAULT_TRENDING);
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message || '刷新失败，已保留当前数据');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-950 text-slate-100 p-6 overflow-y-auto font-sans">
       
@@ -113,12 +157,14 @@ const NewsPage: React.FC = () => {
           <p className="text-slate-400 text-sm mt-1">7x24小时 A股市场动态与深度解读</p>
         </div>
         <button 
-          onClick={() => { setLoading(true); setTimeout(() => setLoading(false), 800); }}
+          onClick={handleRefresh}
           className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
         >
           <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
+
+      {error && <div className="text-sm text-red-400 mb-4">{error}</div>}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
@@ -149,14 +195,25 @@ const NewsPage: React.FC = () => {
                   {item.title}
                 </h3>
                 <p className="text-sm text-slate-400 leading-relaxed mb-3">
-                  {item.summary}
+                  {item.summary || '暂无摘要'}
                 </p>
                 
                 <div className="flex justify-between items-center text-xs text-slate-500 border-t border-slate-800 pt-3 mt-3">
                   <span>来源: {item.source}</span>
-                  <button className="flex items-center gap-1 hover:text-blue-400 transition-colors">
-                    查看原文 <ExternalLink size={12} />
-                  </button>
+                  {item.url ? (
+                    <a
+                      className="flex items-center gap-1 hover:text-blue-400 transition-colors"
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      查看原文 <ExternalLink size={12} />
+                    </a>
+                  ) : (
+                    <span className="flex items-center gap-1 text-slate-600">
+                      无链接 <ExternalLink size={12} />
+                    </span>
+                  )}
                 </div>
               </div>
             ))
@@ -216,7 +273,7 @@ const NewsPage: React.FC = () => {
               热门话题 (Trending)
             </h3>
             <div className="flex flex-wrap gap-2">
-              {['#中特估', '#人工智能', '#半导体复苏', '#美联储加息', '#人民币汇率', '#新能源出海'].map((tag, idx) => (
+              {trending.map((tag, idx) => (
                 <span 
                   key={idx} 
                   className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-full cursor-pointer transition-colors border border-slate-700"
