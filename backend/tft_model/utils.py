@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -78,23 +78,32 @@ def load_feature_dataframe(code: str, regenerate: bool = False) -> pd.DataFrame:
     """
     pq_path, csv_path = _feature_file_paths(code)
 
+    df: Optional[pd.DataFrame] = None
     if pq_path.exists():
         df = pd.read_parquet(pq_path)
+        # 兼容：Parquet 为空但 CSV 有数据（例如 Parquet 写入失败降级为 CSV）
+        if df.empty and csv_path.exists():
+            df_csv = pd.read_csv(csv_path)
+            if not df_csv.empty:
+                df = df_csv
     elif csv_path.exists():
         df = pd.read_csv(csv_path)
-    else:
-        if not regenerate:
+
+    need_build = df is None or df.empty
+    if need_build and not regenerate:
+        if df is None:
             raise FileNotFoundError(
                 f"未找到股票 {code} 的特征文件，请先运行 "
                 "backend/data_pipeline/feature_engineering.py 生成特征。"
             )
-        # 动态生成特征
+        raise ValueError(f"股票 {code} 特征数据为空，无法训练 / 预测。")
+
+    if need_build and regenerate:
         from backend.data_pipeline.feature_engineering import build_features_for_stock
 
         df = build_features_for_stock(code)
-        # build_features_for_stock 本身会写入 Parquet/CSV，这里直接返回
 
-    if df.empty:
+    if df is None or df.empty:
         raise ValueError(f"股票 {code} 特征数据为空，无法训练 / 预测。")
 
     # 确保 trade_date 为 datetime

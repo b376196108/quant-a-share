@@ -16,11 +16,17 @@ from quant_system.processing.market_view import calc_market_overview
 from quant_system.strategy.plugins import load_all_plugins
 from quant_system.strategy.registry import list_strategies, StrategyMeta
 from quant_system.backtest.engine import run_single_backtest
-from backend.tft_model.api import router as tft_router
 from web_api.news import router as news_router
 
+try:
+    from backend.tft_model.api import router as tft_router  # type: ignore
+except Exception as exc:  # noqa: BLE001
+    tft_router = None
+    print(f"[warn] TFT router disabled: {exc}")
+
 app = FastAPI(title="Quant A-Share API")
-app.include_router(tft_router)
+if tft_router is not None:
+    app.include_router(tft_router)
 app.include_router(news_router)
 
 def _load_cors_origins() -> list[str]:
@@ -94,6 +100,9 @@ class BacktestRequest(BaseModel):
     initial_capital: float = 100_000.0
     fee_rate_bps: float = 2.5
     slippage: float = 0.01
+    stamp_duty_bps: float = 5.0
+    execution_price: str = "open"
+    adjustflag: str = "2"
 
 
 def normalize_symbol(code: str) -> str:
@@ -169,7 +178,7 @@ async def run_backtest(req: BacktestRequest):
     price_df = None
     try:
         price_df = get_stock_data(
-            symbol_full, req.start_date, req.end_date, freq="d", fields=None, adjust="2"
+            symbol_full, req.start_date, req.end_date, freq="d", fields=None, adjust=req.adjustflag
         )
     except Exception:
         price_df = None
@@ -180,6 +189,10 @@ async def run_backtest(req: BacktestRequest):
     }
 
     try:
+        exec_price = (req.execution_price or "open").strip().lower()
+        if exec_price not in {"open", "close"}:
+            raise HTTPException(status_code=400, detail="execution_price must be 'open' or 'close'")
+
         result = run_single_backtest(
             symbol=symbol_full,
             start_date=req.start_date,
@@ -190,7 +203,12 @@ async def run_backtest(req: BacktestRequest):
             initial_cash=req.initial_capital,
             fee_rate=req.fee_rate_bps / 10_000.0,  # 万分比 -> 小数
             slippage=req.slippage,
+            stamp_duty_rate=req.stamp_duty_bps / 10_000.0,
+            execution_price=exec_price,
+            adjustflag=req.adjustflag,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

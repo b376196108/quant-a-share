@@ -4,11 +4,41 @@ from __future__ import annotations
 
 import pandas as pd
 
-from quant_system.strategy import register_strategy
+from quant_system.strategy import register_strategy as legacy_register_strategy
 from quant_system.strategy.base_strategy import BaseStrategy, StrategyContext
 
+from ..registry import StrategyMeta, register_strategy
 
-@register_strategy
+
+META = StrategyMeta(
+    id="ma_rsi_long_only",
+    name="均线金叉 + RSI 多头",
+    category="trend",
+    description=(
+        "适用：趋势向上或震荡偏强行情。\n"
+        "信号：快均线上穿慢均线且 RSI > 下限开多，死叉或 RSI > 上限离场。\n"
+        "高胜率：趋势清晰、噪音较小阶段；频繁震荡会降低效果。"
+    ),
+    tags=["trend", "ma", "rsi", "long_only"],
+    default_params={
+        "fast_ma": 5,
+        "slow_ma": 20,
+        "rsi_length": 14,
+        "rsi_lower": 30.0,
+        "rsi_upper": 70.0,
+    },
+    param_schema={
+        "fast_ma": {"type": "int", "min": 2, "max": 60, "step": 1},
+        "slow_ma": {"type": "int", "min": 5, "max": 200, "step": 1},
+        "rsi_length": {"type": "int", "min": 2, "max": 50, "step": 1},
+        "rsi_lower": {"type": "float", "min": 0.0, "max": 50.0, "step": 0.5},
+        "rsi_upper": {"type": "float", "min": 50.0, "max": 100.0, "step": 0.5},
+    },
+)
+
+
+@register_strategy(META)
+@legacy_register_strategy
 class MaRsiLongOnly(BaseStrategy):
     """
     简单多头策略：
@@ -27,6 +57,7 @@ class MaRsiLongOnly(BaseStrategy):
     default_params = {
         "fast_ma": 5,
         "slow_ma": 20,
+        "rsi_length": 14,
         "rsi_lower": 30.0,
         "rsi_upper": 70.0,
     }
@@ -56,7 +87,7 @@ class MaRsiLongOnly(BaseStrategy):
         slow_ma = int(self.params.get("slow_ma", self.default_params["slow_ma"]))
         rsi_lower = float(self.params.get("rsi_lower", self.default_params["rsi_lower"]))
         rsi_upper = float(self.params.get("rsi_upper", self.default_params["rsi_upper"]))
-        rsi_length = int(self.params.get("rsi_length", 14))
+        rsi_length = int(self.params.get("rsi_length", self.default_params["rsi_length"]))
 
         close_col = "close"
         fast_col = f"SMA_{fast_ma}"

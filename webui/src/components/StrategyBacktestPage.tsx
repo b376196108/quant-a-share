@@ -466,6 +466,9 @@ const StrategyBacktestPage: React.FC = () => {
   const [strategiesLoading, setStrategiesLoading] = useState(false);
   const [strategiesError, setStrategiesError] = useState<string | null>(null);
   const [selectedStrategyIds, setSelectedStrategyIds] = useState<string[]>([]);
+  const [hoveredStrategyId, setHoveredStrategyId] = useState<string | null>(
+    null
+  );
   const [combinationMode, setCombinationMode] =
     useState<CombinationMode>('OR');
   const [votingThreshold, setVotingThreshold] = useState<number>(2);
@@ -701,62 +704,77 @@ const StrategyBacktestPage: React.FC = () => {
                       暂无可用策略，请检查后端服务。
                     </div>
                   )}
-                {Object.entries(groupedStrategies).map(([cat, items]) => (
-                  <div
-                    key={cat}
-                    className="border border-slate-800 rounded-lg overflow-hidden bg-slate-900/50"
-                  >
-                    <button
-                      onClick={() => toggleCat(cat)}
-                      className="w-full flex items-center justify-between p-2.5 bg-slate-900 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+                {Object.entries(groupedStrategies).map(([cat, items]) => {
+                  const hovered = items.find(s => s.id === hoveredStrategyId);
+                  const hoveredDescription = hovered?.description;
+                  return (
+                    <div
+                      key={cat}
+                      onMouseLeave={() => setHoveredStrategyId(null)}
+                      className="border border-slate-800 rounded-lg overflow-hidden bg-slate-900/50"
                     >
-                      <span className="uppercase">{cat} Strategies</span>
-                      {expandedCats[cat] ? (
-                        <ChevronDown size={14} />
-                      ) : (
-                        <ChevronRight size={14} />
-                      )}
-                    </button>
+                      <button
+                        onClick={() => toggleCat(cat)}
+                        className="w-full flex items-center justify-between p-2.5 bg-slate-900 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+                      >
+                        <span className="uppercase">{cat} Strategies</span>
+                        {expandedCats[cat] ? (
+                          <ChevronDown size={14} />
+                        ) : (
+                          <ChevronRight size={14} />
+                        )}
+                      </button>
 
-                    {expandedCats[cat] && (
-                      <div className="p-2 space-y-1">
-                        {items.map(s => (
-                          <div
-                            key={s.id}
-                            className="group flex items-center justify-between p-2 rounded hover:bg-slate-800 transition-colors"
-                          >
-                            <label className="flex items-center gap-2 cursor-pointer flex-1">
-                              <input
-                                type="checkbox"
-                                checked={selectedStrategyIds.includes(s.id)}
-                                onChange={() => toggleStrategy(s.id)}
-                                className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-purple-600 focus:ring-offset-slate-900 focus:ring-purple-500"
-                              />
-                              <span
-                                className={`text-sm ${
-                                  selectedStrategyIds.includes(s.id)
-                                    ? 'text-slate-200'
-                                    : 'text-slate-400'
-                                }`}
+                      {expandedCats[cat] && (
+                        <div className="p-2 space-y-2">
+                          <div className="space-y-1">
+                            {items.map(s => (
+                              <div
+                                key={s.id}
+                                onMouseEnter={() => setHoveredStrategyId(s.id)}
+                                className="flex items-center justify-between p-2 rounded hover:bg-slate-800 transition-colors"
                               >
-                                {s.name}
-                              </span>
-                            </label>
-                            <div className="relative group/tooltip">
-                              <Info
-                                size={14}
-                                className="text-slate-600 hover:text-slate-400 cursor-help"
-                              />
-                              <div className="absolute right-0 top-6 w-48 p-2 bg-slate-800 border border-slate-700 rounded shadow-xl text-xs text-slate-300 z-50 hidden group-hover/tooltip:block">
-                                {s.description}
+                                <label className="flex items-center gap-2 cursor-pointer flex-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedStrategyIds.includes(s.id)}
+                                    onChange={() => toggleStrategy(s.id)}
+                                    className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-purple-600 focus:ring-offset-slate-900 focus:ring-purple-500"
+                                  />
+                                  <span
+                                    className={`text-sm ${
+                                      selectedStrategyIds.includes(s.id)
+                                        ? 'text-slate-200'
+                                        : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {s.name}
+                                  </span>
+                                </label>
+                                <Info
+                                  size={14}
+                                  className="text-slate-600 hover:text-slate-300 cursor-help flex-shrink-0"
+                                />
                               </div>
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+
+                          <div className="p-2 bg-slate-950/60 border border-slate-700 rounded text-xs whitespace-pre-line min-h-[54px]">
+                            {hoveredDescription ? (
+                              <span className="text-slate-300">
+                                {hoveredDescription}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">
+                                悬停策略查看说明
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -1163,7 +1181,7 @@ const StrategyBacktestPage: React.FC = () => {
                               r={4}
                               yAxisId="left"
                               fill={
-                                s.type === 'BUY' ? '#22c55e' : '#ef4444'
+                                s.type === 'BUY' ? '#ef4444' : '#22c55e'
                               }
                               stroke="#020617"
                             />
@@ -1243,8 +1261,8 @@ const StrategyBacktestPage: React.FC = () => {
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${
                                 t.side === 'BUY'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40'
-                                  : 'bg-red-500/10 text-red-400 border-red-500/40'
+                                  ? 'bg-red-500/10 text-red-400 border-red-500/40'
+                                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40'
                               }`}
                             >
                               {t.side === 'BUY' ? '买入' : '卖出'}

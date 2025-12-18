@@ -53,9 +53,9 @@ META = StrategyMeta(
     name="Connors RSI(2) 极限反转",
     category="reversal",  # 反转 / 均值回归策略
     description=(
-        "在收盘价站上 SMA200 的长期多头趋势中，"
-        "当 RSI(2) 出现极端超卖(<5) 时买入，价格回到 SMA5 上方即离场，"
-        "可选使用 CumRSI(2)<35 作为更稳健的入场变体。"
+        "适用：长期上升趋势（收盘价 > SMA200）的短线回撤/急跌。\n"
+        "信号：RSI(2) < 5 触发买入，反弹到 SMA5 附近退出。\n"
+        "高胜率：慢牛/趋势向上且回撤后快速修复的品种；熊市慎用。"
     ),
     tags=["mean_reversion", "short_term", "rsi"],
     # 默认参数 = 原文经典设置：

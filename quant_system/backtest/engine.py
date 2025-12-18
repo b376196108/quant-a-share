@@ -43,8 +43,13 @@ class BacktestConfig:
 
     initial_cash: float = 100_000.0
     fee_rate: float = 0.0005
+    stamp_duty_rate: float = 0.0005  # sell-side stamp duty (0.05% by default)
     slippage: float = 0.0  # 以“元”为单位加在价格上
     allow_short: bool = False  # 当前仅实现做多，做空占位
+
+
+    execution_price: str = "open"  # "open" | "close"; default: next-day open execution
+    mark_to_market_price: str = "close"  # equity valuation price; default: close
 
 
 class BacktestEngine:
@@ -77,60 +82,81 @@ class BacktestEngine:
         equity_list: list[float] = []
         trade_records: list[dict[str, object]] = []
 
+        exec_col = str(cfg.execution_price or "close").strip().lower()
+        if exec_col not in {"open", "close"}:
+            exec_col = "close"
+        mtm_col = str(cfg.mark_to_market_price or "close").strip().lower()
+        if mtm_col not in {"open", "close"}:
+            mtm_col = "close"
+
         for date, row in df.iterrows():
             raw_signal = int(row.get("signal", 0))
             signal = raw_signal
             if not cfg.allow_short and signal < 0:
                 signal = 0
 
-            price = float(row["close"])
-            if np.isnan(price) or price <= 0:
-                equity_list.append(
-                    cash + position * price if not np.isnan(price) else cash
-                )
+            close_price = float(row.get("close", np.nan))
+            if np.isnan(close_price) or close_price <= 0:
+                # close 无效：无法退化到可靠价格，跳过当日撮合与估值计算
+                equity_list.append(equity_list[-1] if equity_list else cash)
                 continue
+
+            exec_price = float(row.get(exec_col, np.nan))
+            if np.isnan(exec_price) or exec_price <= 0:
+                exec_price = close_price
+
+            mtm_price = float(row.get(mtm_col, np.nan))
+            if np.isnan(mtm_price) or mtm_price <= 0:
+                mtm_price = close_price
 
             # 买入：当前空仓且目标信号为 1 → 全仓买入
             if position == 0 and signal == 1:
-                trade_price = price + cfg.slippage
-                shares = int(cash // trade_price)
-                if shares > 0:
-                    cost = trade_price * shares
-                    fee = cost * cfg.fee_rate
-                    cash -= cost + fee
-                    position += shares
-                    trade_records.append(
-                        {
-                            "date": date,
-                            "action": "buy",
-                            "price": trade_price,
-                            "shares": shares,
-                            "fee": fee,
-                            "cash_after": cash,
-                            "position_after": position,
-                        }
-                    )
+                trade_price = exec_price + cfg.slippage
+                if not np.isnan(trade_price) and trade_price > 0:
+                    # Ensure cash covers fees (buy side only charges fee_rate)
+                    shares = int(cash // (trade_price * (1.0 + cfg.fee_rate)))
+                    if shares > 0:
+                        cost = trade_price * shares
+                        fee = cost * cfg.fee_rate
+                        cash -= cost + fee
+                        position += shares
+                        trade_records.append(
+                            {
+                                "date": date,
+                                "action": "buy",
+                                "price": trade_price,
+                                "shares": shares,
+                                "fee": fee,
+                                "stamp_duty": 0.0,
+                                "cash_after": cash,
+                                "position_after": position,
+                            }
+                        )
 
             # 卖出/平仓：当前有仓位且目标信号为 0 → 全部卖出
             elif position > 0 and signal == 0:
-                trade_price = price - cfg.slippage
-                amount = trade_price * position
-                fee = amount * cfg.fee_rate
-                cash += amount - fee
-                trade_records.append(
-                    {
-                        "date": date,
-                        "action": "sell",
-                        "price": trade_price,
-                        "shares": position,
-                        "fee": fee,
-                        "cash_after": cash,
-                        "position_after": 0,
-                    }
-                )
-                position = 0
+                trade_price = exec_price - cfg.slippage
+                if not np.isnan(trade_price) and trade_price > 0:
+                    amount = trade_price * position
+                    fee = amount * cfg.fee_rate
+                    stamp = amount * cfg.stamp_duty_rate
+                    total_fee = fee + stamp
+                    cash += amount - total_fee
+                    trade_records.append(
+                        {
+                            "date": date,
+                            "action": "sell",
+                            "price": trade_price,
+                            "shares": position,
+                            "fee": total_fee,
+                            "stamp_duty": stamp,
+                            "cash_after": cash,
+                            "position_after": 0,
+                        }
+                    )
+                    position = 0
 
-            equity = cash + position * price
+            equity = cash + position * mtm_price
             equity_list.append(equity)
 
         equity_curve = pd.Series(equity_list, index=df.index, name="equity")
@@ -211,6 +237,9 @@ def run_single_backtest(
     initial_cash: float = 100_000.0,
     fee_rate: float = 0.0005,
     slippage: float = 0.0,
+    stamp_duty_rate: float = 0.0005,
+    execution_price: str = "open",
+    adjustflag: str = "2",
 ) -> BacktestResult:
     """
     高层封装：单只股票 + 多策略组合回测。
@@ -237,7 +266,7 @@ def run_single_backtest(
     params_map: Dict[str, Dict[str, Any]] = strategy_params or {}
 
     # 1) 拉取日线行情
-    df = get_stock_data(symbol, start_date, end_date)
+    df = get_stock_data(symbol, start_date, end_date, adjust=adjustflag)
     if df is None or df.empty:
         raise ValueError(f"没有 {symbol} 在 {start_date}~{end_date} 的历史数据")
 
@@ -298,8 +327,11 @@ def run_single_backtest(
         config=BacktestConfig(
             initial_cash=initial_cash,
             fee_rate=fee_rate,
+            stamp_duty_rate=stamp_duty_rate,
             slippage=slippage,
             allow_short=False,
+            execution_price=execution_price,
+            mark_to_market_price="close",
         )
     )
     result = engine.run(bt_df)

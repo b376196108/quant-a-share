@@ -37,13 +37,7 @@ def _ensure_feature_dataframe(ts_code: str) -> pd.DataFrame:
     尝试加载特征，缺失时自动运行特征工程生成。
     """
     norm_code = normalize_stock_code(ts_code)
-    try:
-        return load_feature_dataframe(norm_code, regenerate=False)
-    except FileNotFoundError:
-        df = build_features_for_stock(norm_code)
-        if df is None or df.empty:
-            raise ValueError(f"股票 {ts_code} 特征数据为空，无法训练/预测")
-        return load_feature_dataframe(norm_code, regenerate=False)
+    return load_feature_dataframe(norm_code, regenerate=True)
 
 
 def _normalize_ts_code(ts_code: str) -> str:
@@ -274,8 +268,12 @@ def _tft_predict_direction(ts_code: str) -> Optional[Tuple[str, float]]:
     Run TFT to get direction classification (buy/neutral/sell) with confidence.
     Returns None if TFT is unavailable or fails.
     """
-    # 确保特征文件存在（缺失则动态生成）
-    _ensure_feature_dataframe(ts_code)
+    # 确保特征文件存在（缺失/为空则动态生成）；失败则回退 baseline
+    try:
+        _ensure_feature_dataframe(ts_code)
+    except Exception:
+        logger.exception("failed to ensure feature dataframe for %s", ts_code)
+        return None
 
     model = _load_tft_model()
     if model is None:
@@ -408,6 +406,14 @@ def tft_price_forecast(
         df_recent = df_recent.dropna(subset=numeric_cols)
     if df_recent.empty:
         raise ValueError("回归预测：清理缺失后数据为空")
+
+    # from_dataset 需要 time_idx 列；_build_regression_dataset_for_code 内部会生成 time_idx，
+    # 但不会回写到 df_recent，因此这里提前补齐以避免 KeyError: 'time_idx'
+    if "time_idx" not in df_recent.columns:
+        df_recent = df_recent.sort_values(["code", "trade_date"]).copy()
+        df_recent["time_idx"] = (
+            df_recent.groupby("code")["trade_date"].rank(method="first").astype(int) - 1
+        )
 
     training_ds = _build_regression_dataset_for_code(
         df_recent,

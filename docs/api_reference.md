@@ -1,13 +1,65 @@
 # A股量化分析系统 API 说明文档
 
-> 本文档由 `scripts/generate_api_docs.py` 自动生成（生成时间：2025-12-07 18:01:35）。
+> 本文档由 `scripts/generate_api_docs.py` 自动生成（生成时间：2025-12-17 08:59:11）。
 > 请勿手工修改本文件，如需更新请修改源码或脚本后重新生成。
 
 ---
 
 ## 模块 `quant_system.backtest.engine`
 
-单标的日线回测引擎（最小可用版本）。
+单标的日线回测引擎 + 多策略组合封装。
+
+分两层：
+1）BacktestEngine / BacktestConfig
+    - 保持你原来的实现：输入已经带有 `signal` 列的 DataFrame，输出 BacktestResult。
+2）run_single_backtest / combine_signals
+    - 负责：
+        * 从数据模块取日线行情（get_stock_data）
+        * 通过策略注册表创建策略实例（create_strategy）
+        * 生成每个策略的信号并按组合方式合成（AND / OR / Voting）
+        * 调用 BacktestEngine.run() 完成真实回测
+
+
+### 函数
+
+#### combine_signals
+
+- 签名：`combine_signals(signals: 'List[pd.Series]', mode: 'str' = 'OR') -> 'pd.Series'`
+
+**说明：**
+
+将多个策略信号按指定模式合成一个最终 signal 序列。
+
+参数：
+    signals : 若干个 pd.Series，每个取值一般在 {-1, 0, 1}
+    mode    : "AND" / "OR" / "VOTING"
+
+返回：
+    combined : pd.Series，index 为日期，name="signal"
+
+#### run_single_backtest
+
+- 签名：`run_single_backtest(symbol: 'str', start_date: 'str', end_date: 'str', strategy_ids: 'List[str]', mode: 'str' = 'OR', strategy_params: 'Optional[Dict[str, Dict[str, Any]]]' = None, initial_cash: 'float' = 100000.0, fee_rate: 'float' = 0.0005, slippage: 'float' = 0.0) -> 'BacktestResult'`
+
+**说明：**
+
+高层封装：单只股票 + 多策略组合回测。
+
+这就是后面 FastAPI /api/backtest/run 可以直接调用的核心函数。
+
+参数：
+    symbol          : 股票代码（如 "600519"）
+    start_date      : 回测开始日期 "YYYY-MM-DD"
+    end_date        : 回测结束日期 "YYYY-MM-DD"
+    strategy_ids    : 参与组合的策略 id 列表（如 ["connors_rsi2"]）
+    mode            : 组合方式，"AND" / "OR" / "VOTING"
+    strategy_params : 每个策略的参数字典，key=策略 id，value=参数 dict，可为 None
+    initial_cash    : 初始资金
+    fee_rate        : 手续费率（万分之 2.5 就填 0.00025）
+    slippage        : 单边滑点（元）
+
+返回：
+    BacktestResult（与 BacktestEngine.run 一致）
 
 
 ### 类
@@ -168,11 +220,15 @@ Local cache utilities for CSV and SQLite storage.
 
 #### get_db_connection
 
-- 签名：`get_db_connection() -> 'sqlite3.Connection'`
+- 签名：`get_db_connection(timeout: 'float' = 30.0) -> 'sqlite3.Connection'`
 
 **说明：**
 
-Return SQLite connection; ensure directory exists.
+Return SQLite connection with sensible defaults for concurrent read/write.
+
+- timeout/busy_timeout: give writers time to wait for short-lived readers
+- WAL mode: allow reads while writing (needed when API is serving requests)
+- synchronous=NORMAL: balance durability and write speed for cache usage
 
 #### get_latest_trade_date
 
@@ -233,6 +289,14 @@ Load stock daily data with MultiIndex (trade_date, code).
         - industry
         - industry_classification
         - update_date
+
+#### migrate_stock_daily_add_new_fields
+
+- 签名：`migrate_stock_daily_add_new_fields(conn: 'sqlite3.Connection') -> 'None'`
+
+**说明：**
+
+为 stock_daily 增加新增字段（若已存在则忽略），便于兼容旧库。
 
 #### save_to_cache
 
@@ -693,6 +757,27 @@ Notebook 示例：
 - `generate_signals(self, df: 'pd.DataFrame', context: 'Optional[StrategyContext]' = None) -> 'pd.Series'`
 - `required_indicators(self) -> 'list[str]'`
 
+#### PluggableStrategy
+
+- 定义：`class PluggableStrategy`
+
+**说明：**
+
+带有元信息的策略基类，所有“策略插件”都继承它。
+注意：仍然沿用 BaseStrategy 的 generate_signals 接口（返回 signal 序列）。
+
+**公开方法：**
+
+- `get_meta() -> 'Dict[str, Any]'`
+
+#### StrategyCategory
+
+- 定义：`class StrategyCategory`
+
+**说明：**
+
+策略大类，对齐前端：趋势 / 反转 / 波动率 / 成交量。
+
 #### StrategyContext
 
 - 定义：`class StrategyContext`
@@ -707,6 +792,97 @@ Notebook 示例：
     fee_rate：手续费率。
     slippage：滑点（元）。
     extra：预留的额外上下文字段。
+
+#### StrategyMeta
+
+- 定义：`class StrategyMeta`
+
+**说明：**
+
+策略元信息，既给前端用，也给回测引擎用。
+
+#### StrategyParamMeta
+
+- 定义：`class StrategyParamMeta`
+
+**说明：**
+
+单个参数的元数据，用于前端渲染表单和后端校验。
+
+
+## 模块 `quant_system.strategy.plugins`
+
+策略插件包。
+
+提供 `load_all_plugins()` 动态加载本目录下的所有策略模块，
+确保它们的 @register_strategy 装饰器被执行。
+
+
+### 函数
+
+#### load_all_plugins
+
+- 签名：`load_all_plugins() -> 'List[ModuleType]'`
+
+**说明：**
+
+动态导入本包下的所有 .py 策略文件（排除以下划线开头的模块）。
+
+用法示例（在回测或 API 启动时调用一次即可）：
+    from quant_system.strategy.plugins import load_all_plugins
+    from quant_system.strategy.registry import list_strategies
+
+    load_all_plugins()
+    metas = [m.to_dict() for m in list_strategies()]
+
+
+## 模块 `quant_system.strategy.plugins.connors_rsi2`
+
+Connors RSI(2) 极限反转策略（V1：贴近期刊/书籍原始规则版本）
+
+对应文档《策略一：Connors RSI(2) 极限反转策略》：
+
+- 环境过滤：收盘价 > 200 日简单移动平均线 (SMA200)，只在长期上升趋势中做多；
+- 入场信号：RSI(2) < 5（默认），部分激进可放宽到 < 10；
+- 变体：CumRSI(2) = RSI(2) 当天 + 前一天，当 CumRSI(2) < 35 时买入（本版本中为可选增强，默认关闭）；
+- 出场信号：收盘价 > 5 日简单移动平均线 (SMA5)，视为价格已回归短期均值；
+- 止损：原版不设硬止损，依赖高胜率 + 分散持仓，本策略保持此设定，ATR 止损预留给回测引擎统一实现。
+
+
+### 函数
+
+#### compute_rsi
+
+- 签名：`compute_rsi(close: 'pd.Series', period: 'int') -> 'pd.Series'`
+
+**说明：**
+
+简单 RSI 计算：
+    RSI = 100 - 100 / (1 + RS)
+    RS = 平均上涨幅度 / 平均下跌幅度
+
+这里使用 rolling mean 近似 Wilder 的平滑方法，对 N=2 的短周期影响很小。
+
+
+### 类
+
+#### ConnorsRsi2Strategy
+
+- 定义：`class ConnorsRsi2Strategy`
+
+**说明：**
+
+Connors RSI(2) 极限反转策略（V1 原始规则版，只做多）。
+
+约定：
+    - 输入 df 至少包含列：open/high/low/close/volume；
+    - 本策略内部自行计算 RSI(2)、SMA5、SMA200，不依赖外部指标列；
+    - 输出为 0/1 持仓序列（不做空），执行时机由回测引擎控制。
+
+**公开方法：**
+
+- `generate_signals(self, df: 'pd.DataFrame', context: 'Optional[StrategyContext]' = None) -> 'pd.Series'`
+- `required_indicators(self) -> 'list[str]'`
 
 
 ## 模块 `quant_system.strategy.plugins.ma_rsi_long_only`
@@ -737,4 +913,77 @@ Notebook 示例：
 
 - `generate_signals(self, df: 'pd.DataFrame', context: 'StrategyContext | None' = None) -> 'pd.Series'`
 - `required_indicators(self) -> 'list[str]'`
+
+
+## 模块 `quant_system.strategy.registry`
+
+策略注册表：统一管理所有可用的日线单标的策略。
+
+
+### 函数
+
+#### create_strategy
+
+- 签名：`create_strategy(strategy_id: 'str', params: 'Optional[Dict[str, Any]]' = None) -> 'BaseStrategy'`
+
+**说明：**
+
+根据 id 创建策略实例，在回测模块里用。
+
+#### get_strategy_meta
+
+- 签名：`get_strategy_meta(strategy_id: 'str') -> 'StrategyMeta'`
+
+**说明：**
+
+(暂无说明，TODO)
+
+#### list_strategies
+
+- 签名：`list_strategies(category: 'Optional[str]' = None) -> 'List[StrategyMeta]'`
+
+**说明：**
+
+返回所有策略的元信息列表，可按类别过滤。
+
+以后 /api/backtest/strategies 可以直接：
+    from quant_system.strategy.registry import list_strategies
+    ...
+
+#### register_strategy
+
+- 签名：`register_strategy(meta: 'StrategyMeta')`
+
+**说明：**
+
+用作类装饰器，将策略类注册到全局表中。
+
+示例：
+    @register_strategy(StrategyMeta(...))
+    class MyStrategy(BaseStrategy):
+        ...
+
+
+### 类
+
+#### StrategyMeta
+
+- 定义：`class StrategyMeta`
+
+**说明：**
+
+策略元信息，用于前端展示和参数配置。
+
+字段说明：
+    id          : 唯一标识（英文短名，如 "connors_rsi2"）
+    name        : 中文名，用于 UI 展示
+    category    : 策略类别（如 "trend" / "reversal" / "volatility" / "volume"）
+    description : 简短说明
+    tags        : 若干标签（如 ["mean_reversion", "short_term"]）
+    default_params : 默认参数（回测时若没传就用这里）
+    param_schema   : 参数结构描述，给前端或配置中心用（可选）
+
+**公开方法：**
+
+- `to_dict(self) -> 'Dict[str, Any]'`
 

@@ -6,6 +6,7 @@ import datetime as _dt
 from datetime import date, timedelta
 from typing import Iterable, List, Optional
 import traceback
+import threading
 
 import baostock as bs
 import pandas as pd
@@ -51,6 +52,20 @@ INDEX_CODES = {
 }
 
 _LOGGED_IN = False
+_BS_LOCK = threading.RLock()
+
+# BaoStock client is not thread-safe; treat common network/session issues as transient.
+_TRANSIENT_BS_ERROR_CODES = {"10002007", "10002006", "10001001"}
+
+
+def _reset_bs_session() -> None:
+    """Best-effort reset BaoStock session (logout + mark as not logged in)."""
+    global _LOGGED_IN
+    try:
+        bs.logout()
+    except Exception:
+        pass
+    _LOGGED_IN = False
 
 
 # -----------------------------------------------------------------------------
@@ -61,14 +76,15 @@ _LOGGED_IN = False
 def _ensure_bs_login() -> bool:
     """Login to BaoStock once."""
     global _LOGGED_IN
-    if _LOGGED_IN:
+    with _BS_LOCK:
+        if _LOGGED_IN:
+            return True
+        resp = bs.login()
+        if resp.error_code != "0":
+            print(f"[BaoStock] 登录失败：{resp.error_code} {resp.error_msg}")
+            return False
+        _LOGGED_IN = True
         return True
-    resp = bs.login()
-    if resp.error_code != "0":
-        print(f"[BaoStock] 登录失败：{resp.error_code} {resp.error_msg}")
-        return False
-    _LOGGED_IN = True
-    return True
 
 
 def _validate_dates(start_date: str, end_date: str) -> bool:
@@ -168,35 +184,62 @@ def _fetch_remote_history(
     fields: List[str],
     adjust: str,
 ) -> pd.DataFrame:
-    if not _ensure_bs_login():
-        return pd.DataFrame()
     if freq != "d":
         print(f"[数据获取] 暂不支持 freq={freq}，当前仅支持日线（'d'）。")
         return pd.DataFrame()
 
     field_str = ",".join(fields)
-    rs = bs.query_history_k_data_plus(
-        code,
-        field_str,
-        start_date=start_date,
-        end_date=end_date,
-        frequency=freq,
-        adjustflag=adjust,
-    )
-    if rs.error_code != "0":
-        print(f"[数据获取] 拉取失败：{code}，错误 {rs.error_code} - {rs.error_msg}")
-        return pd.DataFrame()
+    max_retries = 3
+    last_err: Optional[Exception] = None
 
-    rows = []
-    while rs.next():
-        rows.append(rs.get_row_data())
+    for attempt in range(1, max_retries + 1):
+        if not _ensure_bs_login():
+            return pd.DataFrame()
 
-    if not rows:
-        print(f"[数据获取] 无数据：{code}，时间区间 {start_date} ~ {end_date}")
-        return pd.DataFrame(columns=rs.fields)
+        try:
+            # BaoStock uses a global socket/session; it must be serialized across threads.
+            with _BS_LOCK:
+                rs = bs.query_history_k_data_plus(
+                    code,
+                    field_str,
+                    start_date=start_date,
+                    end_date=end_date,
+                    frequency=freq,
+                    adjustflag=adjust,
+                )
 
-    df = pd.DataFrame(rows, columns=rs.fields)
-    return _format_history_df(df)
+                if rs.error_code != "0":
+                    if (rs.error_code in _TRANSIENT_BS_ERROR_CODES) or ("网络" in (rs.error_msg or "")):
+                        raise RuntimeError(f"BaoStock transient error {rs.error_code}: {rs.error_msg}")
+
+                    print(f"[数据获取] 拉取失败：{code}，错误 {rs.error_code} - {rs.error_msg}")
+                    return pd.DataFrame()
+
+                rows: List[List[str]] = []
+                while rs.next():
+                    rows.append(rs.get_row_data())
+
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            with _BS_LOCK:
+                _reset_bs_session()
+
+            if attempt < max_retries:
+                _time.sleep(0.5 * attempt)
+                continue
+
+            print(f"[数据获取] 拉取失败：{code}，异常：{last_err}")
+            return pd.DataFrame()
+
+        if not rows:
+            print(f"[数据获取] 无数据：{code}，时间区间 {start_date} ~ {end_date}")
+            return pd.DataFrame(columns=rs.fields)
+
+        df = pd.DataFrame(rows, columns=rs.fields)
+        return _format_history_df(df)
+
+    print(f"[数据获取] 拉取失败：{code}，异常：{last_err}")
+    return pd.DataFrame()
 
 
 # -----------------------------------------------------------------------------
